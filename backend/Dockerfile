@@ -35,8 +35,8 @@ COPY --from=builder /app/main .
 # 创建必要的目录
 RUN mkdir -p /root/database /root/logs
 
-# 复制数据库文件（如果存在）
-COPY --from=builder /app/database/ ./database/
+# 注意：数据库文件应该通过挂载卷或环境变量在运行时提供
+# 不在构建时复制数据库文件，因为它们不应该包含在镜像中
 
 # 设置环境变量
 ENV GIN_MODE=release
