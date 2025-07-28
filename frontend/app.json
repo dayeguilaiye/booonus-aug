@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "booonus",
+    "slug": "booonus",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFB6C1"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.booonus.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFB6C1"
+      },
+      "package": "com.booonus.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "53fffd79-47bb-4abc-89aa-ef0392e10520"
+      }
+    },
+    "plugins": [
+      "expo-build-properties"
+    ]
+  },
+  "experiments": {
+    "reactCanary": true
+  }
+}
