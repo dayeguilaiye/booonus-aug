@@ -2,12 +2,12 @@ name: Build Backend Docker Image
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths:
       - 'backend/**'
       - '.github/workflows/backend-build.yml'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths:
       - 'backend/**'
       - '.github/workflows/backend-build.yml'
@@ -59,7 +59,10 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        platforms: linux/amd64,linux/arm64
+        # platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
 
     - name: Image digest
       run: echo "Image digest:" ${{ steps.build.outputs.digest }}
