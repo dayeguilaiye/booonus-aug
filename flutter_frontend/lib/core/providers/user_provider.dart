@@ -29,19 +29,16 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProfile(String username) async {
+  Future<bool> updateProfile({String? username, String? avatar}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final response = await AuthApiService.updateProfile(username);
-      if (response['user'] != null) {
-        _user = User.fromJson(response['user']);
-        notifyListeners();
-        return true;
-      }
-      return false;
+      await AuthApiService.updateProfile(username: username, avatar: avatar);
+      // 重新加载用户信息以获取最新数据
+      await loadUserProfile();
+      return true;
     } catch (e) {
       _setError('更新用户信息失败：${e.toString()}');
       return false;

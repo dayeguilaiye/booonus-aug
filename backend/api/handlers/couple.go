@@ -42,9 +42,9 @@ func InviteCouple(c *gin.Context) {
 	// 查找目标用户
 	var targetUser models.User
 	err = database.DB.QueryRow(
-		"SELECT id, username, couple_id FROM users WHERE username = ?",
+		"SELECT id, username, avatar, couple_id FROM users WHERE username = ?",
 		req.Username,
-	).Scan(&targetUser.ID, &targetUser.Username, &targetUser.CoupleID)
+	).Scan(&targetUser.ID, &targetUser.Username, &targetUser.Avatar, &targetUser.CoupleID)
 
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -91,6 +91,7 @@ func InviteCouple(c *gin.Context) {
 		"partner": gin.H{
 			"id":       targetUser.ID,
 			"username": targetUser.Username,
+			"avatar":   targetUser.Avatar,
 		},
 	})
 }
@@ -195,13 +196,13 @@ func GetCouple(c *gin.Context) {
 
 	// 获取伴侣的用户信息
 	partnerQuery := `
-		SELECT id, username, points, created_at, updated_at
+		SELECT id, username, points, avatar, created_at, updated_at
 		FROM users
 		WHERE id = ?
 	`
 
 	err = database.DB.QueryRow(partnerQuery, partnerID).Scan(
-		&partnerUser.ID, &partnerUser.Username, &partnerUser.Points,
+		&partnerUser.ID, &partnerUser.Username, &partnerUser.Points, &partnerUser.Avatar,
 		&partnerUser.CreatedAt, &partnerUser.UpdatedAt,
 	)
 
@@ -223,6 +224,7 @@ func GetCouple(c *gin.Context) {
 				"id":         partnerUser.ID,
 				"username":   partnerUser.Username,
 				"points":     partnerUser.Points,
+				"avatar":     partnerUser.Avatar,
 				"created_at": partnerUser.CreatedAt,
 				"updated_at": partnerUser.UpdatedAt,
 			},

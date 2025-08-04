@@ -2,7 +2,8 @@ import 'package:dio/dio.dart';
 import 'storage_service.dart';
 
 class ApiService {
-  static const String defaultBaseUrl = 'http://192.168.31.248:8080';
+  // static const String defaultBaseUrl = 'http://192.168.31.248:8080';
+  static const String defaultBaseUrl = 'http://172.20.10.30:8080';
   late Dio _dio;
   
   ApiService() {

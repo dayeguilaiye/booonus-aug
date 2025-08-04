@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:provider/provider.dart';
 import '../../../core/models/rule.dart';
+import '../../../core/models/couple.dart';
 import '../../../core/services/rules_api_service.dart';
-import '../../../core/utils/snackbar_utils.dart';
-import '../../../core/utils/dialog_utils.dart';
-import '../../widgets/empty_state_widget.dart';
-import '../../widgets/loading_widget.dart';
-import '../../widgets/points_chip.dart';
+import '../../../core/services/couple_api_service.dart';
+import '../../../core/providers/user_provider.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../widgets/user_avatar.dart';
 
 class RulesScreen extends StatefulWidget {
   const RulesScreen({super.key});
@@ -18,6 +19,8 @@ class RulesScreen extends StatefulWidget {
 class _RulesScreenState extends State<RulesScreen> {
   List<Rule> _rules = [];
   bool _isLoading = true;
+  Couple? _couple;
+  String? _error;
 
   @override
   void initState() {
@@ -31,19 +34,38 @@ class _RulesScreenState extends State<RulesScreen> {
   Future<void> _loadRules() async {
     setState(() {
       _isLoading = true;
+      _error = null;
     });
 
     try {
+      // Load user profile
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      await userProvider.loadUserProfile();
+
+      // Load couple info
+      try {
+        final coupleResponse = await CoupleApiService.getCouple();
+        if (coupleResponse['couple'] != null) {
+          _couple = Couple.fromJson(coupleResponse['couple']);
+        } else {
+          _couple = null;
+        }
+      } catch (e) {
+        if (e.toString().contains('暂无情侣关系')) {
+          _couple = null;
+        } else {
+          print('Unexpected error loading couple info: $e');
+        }
+      }
+
+      // Load rules
       final response = await RulesApiService.getRules();
       final rulesData = response['rules'] as List<dynamic>? ?? [];
-
-      setState(() {
-        _rules = rulesData.map((rule) => Rule.fromJson(rule)).toList();
-      });
+      _rules = rulesData.map((rule) => Rule.fromJson(rule)).toList();
     } catch (e) {
-      if (mounted) {
-        SnackbarUtils.showError(context, '加载规则失败: ${_getErrorMessage(e)}');
-      }
+      setState(() {
+        _error = '加载数据失败：${e.toString()}';
+      });
     } finally {
       setState(() {
         _isLoading = false;
@@ -68,46 +90,69 @@ class _RulesScreenState extends State<RulesScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('创建规则'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          title: const Text('创建约定'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.85,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: '规则名称',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: '约定名称',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.rule),
                   ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: '规则描述',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: '约定描述',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.description),
                   ),
                   maxLines: 3,
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: pointsController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: '积分变化（正数为奖励，负数为惩罚）',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.diamond),
                   ),
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-                const Text('适用对象:', style: TextStyle(fontSize: 16)),
+                Text(
+                  '适用对象:',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 8),
+                // 紧凑的单选按钮布局
                 Column(
                   children: [
                     RadioListTile<String>(
                       title: const Text('用户1'),
                       value: 'user1',
                       groupValue: targetType,
+                      activeColor: AppColors.primary,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
                       onChanged: (value) {
                         setDialogState(() {
                           targetType = value!;
@@ -118,6 +163,9 @@ class _RulesScreenState extends State<RulesScreen> {
                       title: const Text('用户2'),
                       value: 'user2',
                       groupValue: targetType,
+                      activeColor: AppColors.primary,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
                       onChanged: (value) {
                         setDialogState(() {
                           targetType = value!;
@@ -128,6 +176,9 @@ class _RulesScreenState extends State<RulesScreen> {
                       title: const Text('双方'),
                       value: 'both',
                       groupValue: targetType,
+                      activeColor: AppColors.primary,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
                       onChanged: (value) {
                         setDialogState(() {
                           targetType = value!;
@@ -136,16 +187,24 @@ class _RulesScreenState extends State<RulesScreen> {
                     ),
                   ],
                 ),
-              ],
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+              child: Text(
+                '取消',
+                style: TextStyle(color: AppColors.onSurfaceVariant),
+              ),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.onPrimary,
+              ),
               child: const Text('创建'),
             ),
           ],
@@ -165,13 +224,23 @@ class _RulesScreenState extends State<RulesScreen> {
 
   Future<void> _createRule(String name, String description, String pointsStr, String targetType) async {
     if (name.isEmpty || pointsStr.isEmpty) {
-      SnackbarUtils.showError(context, '请填写规则名称和积分');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('请填写约定名称和积分'),
+          backgroundColor: AppColors.error,
+        ),
+      );
       return;
     }
 
     final points = int.tryParse(pointsStr);
     if (points == null) {
-      SnackbarUtils.showError(context, '请输入有效的积分值');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('请输入有效的积分值'),
+          backgroundColor: AppColors.error,
+        ),
+      );
       return;
     }
 
@@ -184,24 +253,51 @@ class _RulesScreenState extends State<RulesScreen> {
       );
 
       if (mounted) {
-        SnackbarUtils.showSuccess(context, '规则创建成功！');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('约定创建成功！'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
       _loadRules();
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showError(context, '创建规则失败: ${_getErrorMessage(e)}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('创建约定失败: ${_getErrorMessage(e)}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
 
   Future<void> _executeRule(Rule rule) async {
     final pointsText = rule.points > 0 ? '+${rule.points}' : '${rule.points}';
-    final confirmed = await DialogUtils.showConfirmDialog(
-      context,
-      title: '执行规则',
-      content: '确定要执行规则 "${rule.name}" 吗？\n积分变化：$pointsText',
-      confirmText: '执行',
-      confirmColor: Theme.of(context).colorScheme.primary,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('执行约定'),
+        content: Text('确定要执行约定 "${rule.name}" 吗？\n积分变化：$pointsText'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              '取消',
+              style: TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+            ),
+            child: const Text('执行'),
+          ),
+        ],
+      ),
     );
 
     if (confirmed != true) return;
@@ -210,11 +306,21 @@ class _RulesScreenState extends State<RulesScreen> {
       await RulesApiService.executeRule(rule.id);
 
       if (mounted) {
-        SnackbarUtils.showSuccess(context, '规则执行成功！');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('约定执行成功！'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showError(context, '执行规则失败: ${_getErrorMessage(e)}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('执行约定失败: ${_getErrorMessage(e)}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -222,111 +328,405 @@ class _RulesScreenState extends State<RulesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('规则管理'),
-      ),
+      backgroundColor: AppColors.background, // 与home_screen相同的温暖白色背景
       body: _isLoading
-          ? const LoadingWidget(message: '加载中...')
-          : _rules.isEmpty
-              ? EmptyStateWidget(
-                  icon: Icons.rule_outlined,
-                  title: '还没有规则',
-                  subtitle: '创建一些积分规则吧！',
-                  action: ElevatedButton.icon(
-                    onPressed: _showCreateRuleDialog,
-                    icon: const Icon(Icons.add),
-                    label: const Text('创建规则'),
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadRules,
+                        child: const Text('重试'),
+                      ),
+                    ],
                   ),
                 )
               : RefreshIndicator(
                   onRefresh: _loadRules,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _rules.length,
-                    itemBuilder: (context, index) {
-                      final rule = _rules[index];
-                      return _buildRuleCard(rule);
-                    },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTitle(),
+                        const SizedBox(height: 24),
+                        _buildPointsCards(),
+                        const SizedBox(height: 32),
+                        _buildRulesSection(),
+                      ],
+                    ),
                   ),
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateRuleDialog,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildRuleCard(Rule rule) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  // 构建标题
+  Widget _buildTitle() {
+    return const Center(
+      child: Text(
+        '我们的约定',
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.bold,
+          color: AppColors.onBackground, // 深棕色
+        ),
+      ),
+    );
+  }
+
+  // 构建积分卡片
+  Widget _buildPointsCards() {
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, child) {
+        final user = userProvider.user;
+        if (user == null) return const SizedBox.shrink();
+
+        return Row(
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    rule.name,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                PointsChip(points: rule.points),
-              ],
-            ),
-            if (rule.description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                rule.description,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+            Expanded(
+              child: _buildPointCard(
+                user.username,
+                user.points,
+                user.avatar,
+                AppColors.primaryContainer, // 非常浅的桃色
+                AppColors.primary, // 温暖桃粉色
+                Icons.favorite,
+                true, // 是自己
               ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _couple != null
+                  ? _buildPointCard(
+                      _couple!.partner.username,
+                      _couple!.partner.points,
+                      _couple!.partner.avatar,
+                      AppColors.accentContainer, // 浅薄荷绿
+                      AppColors.accent, // 薄荷绿
+                      Icons.favorite,
+                      false, // 是对方
+                    )
+                  : _buildEmptyPointCard(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 构建单个积分卡片
+  Widget _buildPointCard(String name, int points, String? avatar, Color bgColor, Color iconColor, IconData icon, bool isCurrentUser) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          // 左侧：大头像
+          UserAvatar(
+            avatar: avatar,
+            size: 60,
+            borderColor: iconColor,
+            borderWidth: 3,
+          ),
+          const SizedBox(width: 16),
+          // 右侧：两行文字
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.tertiaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                RichText(
+                  text: TextSpan(
                     children: [
-                      Icon(
-                        Icons.person,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.onTertiaryContainer,
+                      TextSpan(
+                        text: name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppColors.onBackground, // 深棕色
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        rule.getTargetTypeText(),
+                      const TextSpan(
+                        text: ' 的积分',
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onTertiaryContainer,
-                          fontSize: 12,
+                          fontSize: 13,
+                          color: AppColors.onSurfaceVariant, // 稍浅的棕色
+                          fontWeight: FontWeight.normal,
                         ),
                       ),
                     ],
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: () => _executeRule(rule),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                const SizedBox(height: 4),
+                Text(
+                  points.toString(),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onBackground, // 深棕色
                   ),
-                  child: const Text('执行'),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建空的积分卡片（当没有情侣时）
+  Widget _buildEmptyPointCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.disabled,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '等待情侣',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.onDisabled,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.disabledContainer,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.favorite_border,
+                  color: AppColors.onDisabled,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                '--',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.onDisabled,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建约定部分
+  Widget _buildRulesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '所有约定',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.onBackground, // 深棕色
+          ),
+        ),
+        const SizedBox(height: 16),
+        _rules.isEmpty
+            ? _buildEmptyRulesState()
+            : Column(
+                children: _rules.map((rule) => _buildRuleCard(rule)).toList(),
+              ),
+      ],
+    );
+  }
+
+  // 构建空约定状态
+  Widget _buildEmptyRulesState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: const Icon(
+              Icons.rule_outlined,
+              size: 40,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '还没有约定',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.onBackground,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '点击右下角的 + 号创建第一个约定吧！',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRuleCard(Rule rule) {
+    final pointsText = rule.points > 0 ? '+${rule.points}积分' : '${rule.points}积分';
+    final pointsColor = rule.points > 0 ? AppColors.success : AppColors.error;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.gentleShadow,
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 主要内容：两列布局
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 左列：约定名称和描述
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        rule.name,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (rule.description.isNotEmpty)
+                        Text(
+                          rule.description,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // 右列：积分和执行按钮
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // 积分显示
+                    Text(
+                      pointsText,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: pointsColor,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // 执行按钮
+                    ElevatedButton(
+                      onPressed: () => _executeRule(rule),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.onPrimary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      ),
+                      child: const Text(
+                        '执行',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            // 底部：适用对象标签
+            if (rule.targetType != 'both') ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.accentWithOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.person,
+                      size: 16,
+                      color: AppColors.accent,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      rule.getTargetTypeText(),
+                      style: TextStyle(
+                        color: AppColors.accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

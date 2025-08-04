@@ -11,8 +11,8 @@ import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
 import 'presentation/screens/shop/shop_screen.dart';
+import 'presentation/screens/shop/my_shop_screen.dart';
 import 'presentation/screens/rules/rules_screen.dart';
-import 'presentation/screens/events/events_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/widgets/main_navigation.dart';
@@ -54,8 +54,14 @@ class BoooonusApp extends StatelessWidget {
       initialLocation: authProvider.isLoggedIn ? '/home' : '/login',
       redirect: (context, state) {
         final isLoggedIn = authProvider.isLoggedIn;
-        final isLoggingIn = state.matchedLocation == '/login' || 
+        final isLoggingIn = state.matchedLocation == '/login' ||
                            state.matchedLocation == '/register';
+        final isSettings = state.matchedLocation == '/settings';
+
+        // 设置页面可以在任何情况下访问
+        if (isSettings) {
+          return null;
+        }
 
         if (!isLoggedIn && !isLoggingIn) {
           return '/login';
@@ -93,10 +99,6 @@ class BoooonusApp extends StatelessWidget {
               builder: (context, state) => const RulesScreen(),
             ),
             GoRoute(
-              path: '/events',
-              builder: (context, state) => const EventsScreen(),
-            ),
-            GoRoute(
               path: '/profile',
               builder: (context, state) => const ProfileScreen(),
             ),
@@ -107,6 +109,12 @@ class BoooonusApp extends StatelessWidget {
         GoRoute(
           path: '/settings',
           builder: (context, state) => const SettingsScreen(),
+        ),
+
+        // My Shop route (outside main navigation)
+        GoRoute(
+          path: '/my-shop',
+          builder: (context, state) => const MyShopScreen(),
         ),
       ],
     );

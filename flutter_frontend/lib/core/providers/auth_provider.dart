@@ -28,7 +28,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final response = await AuthApiService.login(username, password);
-      
+
       if (response['token'] != null) {
         await StorageService.saveToken(response['token']);
         if (response['user'] != null) {
@@ -42,7 +42,12 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _setError('登录失败：${e.toString()}');
+      // 提取错误信息，去掉"Exception: "前缀
+      String errorMessage = e.toString();
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.substring(11);
+      }
+      _setError(errorMessage);
       return false;
     } finally {
       _setLoading(false);
@@ -55,7 +60,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final response = await AuthApiService.register(username, password);
-      
+
       if (response['token'] != null) {
         await StorageService.saveToken(response['token']);
         if (response['user'] != null) {
@@ -69,7 +74,12 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _setError('注册失败：${e.toString()}');
+      // 提取错误信息，去掉"Exception: "前缀
+      String errorMessage = e.toString();
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.substring(11);
+      }
+      _setError(errorMessage);
       return false;
     } finally {
       _setLoading(false);

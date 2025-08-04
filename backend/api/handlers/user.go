@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"booonus-backend/internal/auth"
 	"booonus-backend/internal/database"
@@ -60,7 +61,7 @@ func Register(c *gin.Context) {
 	}
 
 	userID, _ := result.LastInsertId()
-	
+
 	// 生成token
 	token, err := auth.GenerateToken(int(userID))
 	if err != nil {
@@ -77,6 +78,7 @@ func Register(c *gin.Context) {
 			"id":       userID,
 			"username": req.Username,
 			"points":   0,
+			"avatar":   nil,
 		},
 	})
 }
@@ -92,10 +94,10 @@ func Login(c *gin.Context) {
 	// 查找用户
 	var user models.User
 	err := database.DB.QueryRow(
-		"SELECT id, username, password, points, couple_id FROM users WHERE username = ?",
+		"SELECT id, username, password, points, avatar, couple_id FROM users WHERE username = ?",
 		req.Username,
-	).Scan(&user.ID, &user.Username, &user.Password, &user.Points, &user.CoupleID)
-	
+	).Scan(&user.ID, &user.Username, &user.Password, &user.Points, &user.Avatar, &user.CoupleID)
+
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
@@ -123,6 +125,7 @@ func Login(c *gin.Context) {
 			"id":        user.ID,
 			"username":  user.Username,
 			"points":    user.Points,
+			"avatar":    user.Avatar,
 			"couple_id": user.CoupleID,
 		},
 	})
@@ -134,9 +137,9 @@ func GetProfile(c *gin.Context) {
 
 	var user models.User
 	err := database.DB.QueryRow(
-		"SELECT id, username, points, couple_id FROM users WHERE id = ?",
+		"SELECT id, username, points, avatar, couple_id FROM users WHERE id = ?",
 		userID,
-	).Scan(&user.ID, &user.Username, &user.Points, &user.CoupleID)
+	).Scan(&user.ID, &user.Username, &user.Points, &user.Avatar, &user.CoupleID)
 
 	if err != nil {
 		logger.Error("Failed to get user profile: " + err.Error())
@@ -149,6 +152,7 @@ func GetProfile(c *gin.Context) {
 			"id":        user.ID,
 			"username":  user.Username,
 			"points":    user.Points,
+			"avatar":    user.Avatar,
 			"couple_id": user.CoupleID,
 		},
 	})
@@ -157,26 +161,51 @@ func GetProfile(c *gin.Context) {
 // UpdateProfile 更新用户资料
 func UpdateProfile(c *gin.Context) {
 	userID := c.GetInt("user_id")
-	
+
 	var req struct {
-		Username string `json:"username"`
+		Username string  `json:"username"`
+		Avatar   *string `json:"avatar"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 检查用户名是否已被其他用户使用
-	var existingUserID int
-	err := database.DB.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&existingUserID)
-	if err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+	// 检查用户名是否已被其他用户使用（如果提供了用户名）
+	if req.Username != "" {
+		var existingUserID int
+		err := database.DB.QueryRow("SELECT id FROM users WHERE username = ? AND id != ?", req.Username, userID).Scan(&existingUserID)
+		if err == nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+			return
+		}
+	}
+
+	// 构建更新语句
+	updateFields := []string{}
+	updateValues := []interface{}{}
+
+	if req.Username != "" {
+		updateFields = append(updateFields, "username = ?")
+		updateValues = append(updateValues, req.Username)
+	}
+
+	if req.Avatar != nil {
+		updateFields = append(updateFields, "avatar = ?")
+		updateValues = append(updateValues, req.Avatar)
+	}
+
+	if len(updateFields) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
 		return
 	}
 
-	// 更新用户名
-	_, err = database.DB.Exec("UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", req.Username, userID)
+	updateFields = append(updateFields, "updated_at = CURRENT_TIMESTAMP")
+	updateValues = append(updateValues, userID)
+
+	query := "UPDATE users SET " + strings.Join(updateFields, ", ") + " WHERE id = ?"
+	_, err := database.DB.Exec(query, updateValues...)
 	if err != nil {
 		logger.Error("Failed to update profile: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})

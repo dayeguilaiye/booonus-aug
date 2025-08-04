@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
 import '../../../core/models/shop_item.dart';
+import '../../../core/models/couple.dart';
 import '../../../core/services/shop_api_service.dart';
-import '../../../core/utils/snackbar_utils.dart';
-import '../../../core/utils/dialog_utils.dart';
+import '../../../core/services/couple_api_service.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../widgets/empty_state_widget.dart';
-import '../../widgets/loading_widget.dart';
-import '../../widgets/points_chip.dart';
+import '../../widgets/user_avatar.dart';
 
 class MyShopScreen extends StatefulWidget {
   const MyShopScreen({super.key});
@@ -21,6 +19,8 @@ class MyShopScreen extends StatefulWidget {
 class _MyShopScreenState extends State<MyShopScreen> {
   List<ShopItem> _items = [];
   bool _isLoading = true;
+  Couple? _couple;
+  String? _error;
 
   @override
   void initState() {
@@ -33,25 +33,41 @@ class _MyShopScreenState extends State<MyShopScreen> {
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
+      _error = null;
     });
 
     try {
+      // Load user profile
       final userProvider = Provider.of<UserProvider>(context, listen: false);
+      await userProvider.loadUserProfile();
+
+      // Load couple info
+      try {
+        final coupleResponse = await CoupleApiService.getCouple();
+        if (coupleResponse['couple'] != null) {
+          _couple = Couple.fromJson(coupleResponse['couple']);
+        } else {
+          _couple = null;
+        }
+      } catch (e) {
+        if (e.toString().contains('暂无情侣关系')) {
+          _couple = null;
+        } else {
+          print('Unexpected error loading couple info: $e');
+        }
+      }
+
+      // Load my items
       final user = userProvider.user;
-      
       if (user != null) {
-        // 获取当前用户的商品
         final response = await ShopApiService.getItems(ownerId: user.id);
         final itemsData = response['items'] as List<dynamic>? ?? [];
-
-        setState(() {
-          _items = itemsData.map((item) => ShopItem.fromJson(item)).toList();
-        });
+        _items = itemsData.map((item) => ShopItem.fromJson(item)).toList();
       }
     } catch (e) {
-      if (mounted) {
-        SnackbarUtils.showError(context, '加载商品失败: ${_getErrorMessage(e)}');
-      }
+      setState(() {
+        _error = '加载数据失败：${e.toString()}';
+      });
     } finally {
       setState(() {
         _isLoading = false;
@@ -73,69 +89,259 @@ class _MyShopScreenState extends State<MyShopScreen> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.add_shopping_cart, color: AppColors.primary),
-            const SizedBox(width: 8),
-            const Text('添加商品'),
-          ],
+      barrierDismissible: false, // 防止意外关闭
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
-        content: SingleChildScrollView(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: '商品名称',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // 标题栏
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
                   ),
-                  prefixIcon: const Icon(Icons.shopping_bag),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.add_shopping_cart,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Text(
+                        '添加新商品',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      icon: const Icon(Icons.close),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.8),
+                        foregroundColor: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(
-                  labelText: '商品描述',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // 内容区域
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 商品名称
+                      const Text(
+                        '商品名称',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: nameController,
+                        decoration: InputDecoration(
+                          hintText: '例如：按摩服务、做饭、洗碗...',
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: AppColors.primary,
+                              width: 2,
+                            ),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.shopping_bag_outlined,
+                            color: AppColors.primary,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                        ),
+                        textInputAction: TextInputAction.next,
+                      ),
+                      const SizedBox(height: 24),
+                      // 商品描述
+                      const Text(
+                        '商品描述',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: InputDecoration(
+                          hintText: '详细描述这个服务的内容和要求...',
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: AppColors.primary,
+                              width: 2,
+                            ),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.description_outlined,
+                            color: AppColors.primary,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                        ),
+                        maxLines: 4,
+                        textInputAction: TextInputAction.next,
+                      ),
+                      const SizedBox(height: 24),
+                      // 价格
+                      const Text(
+                        '价格（积分）',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: priceController,
+                        decoration: InputDecoration(
+                          hintText: '设置一个合理的积分价格',
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: AppColors.primary,
+                              width: 2,
+                            ),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.diamond_outlined,
+                            color: AppColors.primary,
+                          ),
+                          suffixText: '积分',
+                          suffixStyle: const TextStyle(
+                            color: AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                        ),
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                      ),
+                    ],
                   ),
-                  prefixIcon: const Icon(Icons.description),
                 ),
-                maxLines: 3,
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: priceController,
-                decoration: InputDecoration(
-                  labelText: '价格（积分）',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // 底部按钮
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withValues(alpha: 0.5),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
                   ),
-                  prefixIcon: const Icon(Icons.diamond),
                 ),
-                keyboardType: TextInputType.number,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          '取消',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          '创建商品',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('创建'),
-          ),
-        ],
       ),
     );
 
@@ -150,13 +356,23 @@ class _MyShopScreenState extends State<MyShopScreen> {
 
   Future<void> _createItem(String name, String description, String priceStr) async {
     if (name.isEmpty || priceStr.isEmpty) {
-      SnackbarUtils.showError(context, '请填写商品名称和价格');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请填写商品名称和价格'),
+          backgroundColor: AppColors.error,
+        ),
+      );
       return;
     }
 
     final price = int.tryParse(priceStr);
     if (price == null || price <= 0) {
-      SnackbarUtils.showError(context, '请输入有效的价格');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          backgroundColor: AppColors.error,
+        ),
+      );
       return;
     }
 
@@ -168,23 +384,50 @@ class _MyShopScreenState extends State<MyShopScreen> {
       );
 
       if (mounted) {
-        SnackbarUtils.showSuccess(context, '商品创建成功！');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('商品创建成功！'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
       _loadData();
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showError(context, '创建商品失败: ${_getErrorMessage(e)}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('创建商品失败: ${_getErrorMessage(e)}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
 
   Future<void> _deleteItem(ShopItem item) async {
-    final confirmed = await DialogUtils.showConfirmDialog(
-      context,
-      title: '确认删除',
-      content: '确定要删除商品 "${item.name}" 吗？此操作不可撤销。',
-      confirmText: '删除',
-      confirmColor: Colors.red,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除商品 "${item.name}" 吗？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.onError,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
     );
 
     if (confirmed != true) return;
@@ -193,12 +436,22 @@ class _MyShopScreenState extends State<MyShopScreen> {
       await ShopApiService.deleteItem(item.id);
 
       if (mounted) {
-        SnackbarUtils.showSuccess(context, '商品删除成功！');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('商品删除成功！'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
       _loadData();
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showError(context, '删除商品失败: ${_getErrorMessage(e)}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('删除商品失败: ${_getErrorMessage(e)}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -210,69 +463,271 @@ class _MyShopScreenState extends State<MyShopScreen> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.edit, color: AppColors.secondary),
-            const SizedBox(width: 8),
-            const Text('编辑商品'),
-          ],
+      barrierDismissible: false, // 防止意外关闭
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
-        content: SingleChildScrollView(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: '商品名称',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // 标题栏
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
                   ),
-                  prefixIcon: const Icon(Icons.shopping_bag),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.edit,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '编辑商品',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.onBackground,
+                            ),
+                          ),
+                          Text(
+                            item.name,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      icon: const Icon(Icons.close),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.8),
+                        foregroundColor: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(
-                  labelText: '商品描述',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // 内容区域
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 商品名称
+                      const Text(
+                        '商品名称',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: nameController,
+                        decoration: InputDecoration(
+                          hintText: '例如：按摩服务、做饭、洗碗...',
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: AppColors.accent,
+                              width: 2,
+                            ),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.shopping_bag_outlined,
+                            color: AppColors.accent,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                        ),
+                        textInputAction: TextInputAction.next,
+                      ),
+                      const SizedBox(height: 24),
+                      // 商品描述
+                      const Text(
+                        '商品描述',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: InputDecoration(
+                          hintText: '详细描述这个服务的内容和要求...',
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: AppColors.accent,
+                              width: 2,
+                            ),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.description_outlined,
+                            color: AppColors.accent,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                        ),
+                        maxLines: 4,
+                        textInputAction: TextInputAction.next,
+                      ),
+                      const SizedBox(height: 24),
+                      // 价格
+                      const Text(
+                        '价格（积分）',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: priceController,
+                        decoration: InputDecoration(
+                          hintText: '设置一个合理的积分价格',
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: AppColors.accent,
+                              width: 2,
+                            ),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.diamond_outlined,
+                            color: AppColors.accent,
+                          ),
+                          suffixText: '积分',
+                          suffixStyle: const TextStyle(
+                            color: AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                        ),
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                      ),
+                    ],
                   ),
-                  prefixIcon: const Icon(Icons.description),
                 ),
-                maxLines: 3,
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: priceController,
-                decoration: InputDecoration(
-                  labelText: '价格（积分）',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // 底部按钮
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withValues(alpha: 0.5),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
                   ),
-                  prefixIcon: const Icon(Icons.diamond),
                 ),
-                keyboardType: TextInputType.number,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          '取消',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          '保存更改',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.secondary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('保存'),
-          ),
-        ],
       ),
     );
 
@@ -288,13 +743,23 @@ class _MyShopScreenState extends State<MyShopScreen> {
 
   Future<void> _updateItem(int itemId, String name, String description, String priceStr) async {
     if (name.isEmpty || priceStr.isEmpty) {
-      SnackbarUtils.showError(context, '请填写商品名称和价格');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请填写商品名称和价格'),
+          backgroundColor: AppColors.error,
+        ),
+      );
       return;
     }
 
     final price = int.tryParse(priceStr);
     if (price == null || price <= 0) {
-      SnackbarUtils.showError(context, '请输入有效的价格');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          backgroundColor: AppColors.error,
+        ),
+      );
       return;
     }
 
@@ -306,12 +771,22 @@ class _MyShopScreenState extends State<MyShopScreen> {
       });
 
       if (mounted) {
-        SnackbarUtils.showSuccess(context, '商品更新成功！');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('商品更新成功！'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
       _loadData();
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showError(context, '更新商品失败: ${_getErrorMessage(e)}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('更新商品失败: ${_getErrorMessage(e)}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -319,233 +794,491 @@ class _MyShopScreenState extends State<MyShopScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Icon(Icons.inventory_2, color: Colors.white),
-            const SizedBox(width: 8),
-            const Text('我的小卖部'),
-          ],
-        ),
-        backgroundColor: AppColors.secondary,
-        foregroundColor: Colors.white,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.secondary.withOpacity(0.1),
-              AppColors.background,
-            ],
-          ),
-        ),
-        child: _isLoading
-            ? const LoadingWidget(message: '加载中...')
-            : _items.isEmpty
-                ? EmptyStateWidget(
-                    icon: Icons.inventory_2_outlined,
-                    title: '还没有商品',
-                    subtitle: '添加一些服务商品吧！',
-                    action: ElevatedButton.icon(
-                      onPressed: _showCreateItemDialog,
-                      icon: const Icon(Icons.add),
-                      label: const Text('添加商品'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.secondary,
-                        foregroundColor: Colors.white,
+      backgroundColor: AppColors.background, // 与home_screen相同的温暖白色背景
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadData,
+                        child: const Text('重试'),
                       ),
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _loadData,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _items.length,
-                      itemBuilder: (context, index) {
-                        final item = _items[index];
-                        return _buildMyItemCard(item);
-                      },
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTitle(),
+                        const SizedBox(height: 24),
+                        _buildPointsCards(),
+                        const SizedBox(height: 32),
+                        _buildItemsSection(),
+                      ],
                     ),
                   ),
-      ),
+                ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateItemDialog,
-        backgroundColor: AppColors.secondary,
-        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  // 处理返回按钮点击
+  void _handleBackPress(BuildContext context) {
+    // 现在使用push进入，应该可以正常pop
+    Navigator.of(context).pop();
+  }
+
+  // 构建标题
+  Widget _buildTitle() {
+    return Row(
+      children: [
+        // 返回按钮
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: AppColors.gentleShadow,
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: IconButton(
+            onPressed: () => _handleBackPress(context),
+            icon: const Icon(
+              Icons.arrow_back_ios_new,
+              color: AppColors.onSurface,
+              size: 20,
+            ),
+            tooltip: '返回',
+            style: IconButton.styleFrom(
+              padding: const EdgeInsets.all(12),
+              minimumSize: const Size(44, 44),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        // 标题
+        const Expanded(
+          child: Text(
+            '管理我的小卖部',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: AppColors.onBackground, // 深棕色
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        // 占位，保持标题居中
+        const SizedBox(width: 60), // 与左侧按钮宽度相同
+      ],
+    );
+  }
+
+  // 构建积分卡片
+  Widget _buildPointsCards() {
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, child) {
+        final user = userProvider.user;
+        if (user == null) return const SizedBox.shrink();
+
+        return Row(
+          children: [
+            Expanded(
+              child: _buildPointCard(
+                user.username,
+                user.points,
+                user.avatar,
+                AppColors.primaryContainer, // 非常浅的桃色
+                AppColors.primary, // 温暖桃粉色
+                Icons.favorite,
+                true, // 是自己
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _couple != null
+                  ? _buildPointCard(
+                      _couple!.partner.username,
+                      _couple!.partner.points,
+                      _couple!.partner.avatar,
+                      AppColors.accentContainer, // 浅薄荷绿
+                      AppColors.accent, // 薄荷绿
+                      Icons.favorite,
+                      false, // 是对方
+                    )
+                  : _buildEmptyPointCard(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 构建单个积分卡片
+  Widget _buildPointCard(String name, int points, String? avatar, Color bgColor, Color iconColor, IconData icon, bool isCurrentUser) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          // 左侧：大头像
+          UserAvatar(
+            avatar: avatar,
+            size: 60,
+            borderColor: iconColor,
+            borderWidth: 3,
+          ),
+          const SizedBox(width: 16),
+          // 右侧：两行文字
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppColors.onBackground, // 深棕色
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: ' 的积分',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.onSurfaceVariant, // 稍浅的棕色
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  points.toString(),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onBackground, // 深棕色
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建空的积分卡片（当没有情侣时）
+  Widget _buildEmptyPointCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.disabled,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '等待情侣',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.onDisabled,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.disabledContainer,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.favorite_border,
+                  color: AppColors.onDisabled,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                '--',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.onDisabled,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建商品部分
+  Widget _buildItemsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '我的商品',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.onBackground, // 深棕色
+          ),
+        ),
+        const SizedBox(height: 16),
+        _items.isEmpty
+            ? _buildEmptyItemsState()
+            : Column(
+                children: _items.map((item) => _buildMyItemCard(item)).toList(),
+              ),
+      ],
+    );
+  }
+
+  // 构建空商品状态
+  Widget _buildEmptyItemsState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              size: 40,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '还没有商品',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.onBackground,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '点击右下角的 + 号添加第一个商品吧！',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildMyItemCard(ShopItem item) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.secondary.withOpacity(0.05),
-              Colors.white,
-            ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.gentleShadow,
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Icon(
-                      Icons.shopping_bag,
-                      color: AppColors.secondary,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.secondary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        PriceChip(price: item.price),
-                      ],
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _showEditItemDialog(item);
-                      } else if (value == 'delete') {
-                        _deleteItem(item);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 20),
-                            SizedBox(width: 8),
-                            Text('编辑'),
-                          ],
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 主要内容：两列布局
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 左列：商品名称和描述
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onSurface,
                         ),
                       ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 20, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('删除', style: TextStyle(color: Colors.red)),
-                          ],
+                      const SizedBox(height: 8),
+                      if (item.description.isNotEmpty)
+                        Text(
+                          item.description,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // 右列：价格和操作按钮
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // 价格显示
+                    Text(
+                      '${item.price}积分',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // 操作按钮组
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 编辑按钮
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: IconButton(
+                            onPressed: () => _showEditItemDialog(item),
+                            icon: const Icon(
+                              Icons.edit,
+                              size: 20,
+                              color: AppColors.accent,
+                            ),
+                            tooltip: '编辑',
+                            padding: const EdgeInsets.all(8),
+                            constraints: const BoxConstraints(
+                              minWidth: 36,
+                              minHeight: 36,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // 删除按钮
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: IconButton(
+                            onPressed: () => _deleteItem(item),
+                            icon: const Icon(
+                              Icons.delete,
+                              size: 20,
+                              color: AppColors.error,
+                            ),
+                            tooltip: '删除',
+                            padding: const EdgeInsets.all(8),
+                            constraints: const BoxConstraints(
+                              minWidth: 36,
+                              minHeight: 36,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            // 底部：创建时间
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(
+                  Icons.access_time,
+                  size: 16,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '创建于 ${_formatDate(item.createdAt)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.inventory_2,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        '我的商品',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Icon(
-                        Icons.more_vert,
-                        color: AppColors.secondary,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (item.description.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppColors.secondary.withOpacity(0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    item.description,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
                   ),
                 ),
               ],
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 16,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '创建于 ${_formatDate(item.createdAt)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.store,
-                          size: 16,
-                          color: AppColors.secondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '我的商品',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.secondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

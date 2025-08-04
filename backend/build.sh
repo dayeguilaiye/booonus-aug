@@ -9,6 +9,8 @@
 
 set -e
 
+alias docker="sudo docker"
+
 # 配置
 DOCKER_USERNAME="dayeguilaiye"
 IMAGE_NAME="booonus-backend"

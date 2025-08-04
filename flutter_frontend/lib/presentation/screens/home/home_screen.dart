@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/providers/user_provider.dart';
 import '../../../core/services/couple_api_service.dart';
-import '../../../core/services/points_api_service.dart';
 import '../../../core/models/couple.dart';
-import '../../../core/models/points_history.dart';
+import '../../../core/services/events_api_service.dart';
+import '../../widgets/user_avatar.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
-import '../../widgets/invite_couple_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,14 +18,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Couple? _couple;
-  List<PointsHistory> _recentHistory = [];
   bool _isLoading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    // 延迟到下一帧执行，避免在build过程中调用setState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
@@ -48,41 +43,17 @@ class _HomeScreenState extends State<HomeScreen> {
       // Load couple info
       try {
         final coupleResponse = await CoupleApiService.getCouple();
-        print('Couple API Response: $coupleResponse'); // 调试信息
-
         if (coupleResponse['couple'] != null) {
-          print('Parsing couple data: ${coupleResponse['couple']}'); // 调试信息
           _couple = Couple.fromJson(coupleResponse['couple']);
-          print('Successfully parsed couple: ${_couple?.partner.username}'); // 调试信息
         } else {
-          print('No couple data in response'); // 调试信息
           _couple = null;
-        }
-      } catch (e, stackTrace) {
-        // 打印详细错误信息用于调试
-        print('Failed to load couple info: $e');
-        print('Stack trace: $stackTrace');
-
-        // 如果是404错误（没有情侣关系），这是正常的
-        if (e.toString().contains('暂无情侣关系')) {
-          print('No couple relationship found (404)');
-          _couple = null;
-        } else {
-          // 其他错误，可能是网络问题等，保持当前状态不变
-          print('Unexpected error loading couple info: $e');
-        }
-      }
-
-      // Load recent history
-      try {
-        final historyResponse = await PointsApiService.getHistory(limit: 5);
-        if (historyResponse['history'] != null) {
-          _recentHistory = (historyResponse['history'] as List)
-              .map((item) => PointsHistory.fromJson(item))
-              .toList();
         }
       } catch (e) {
-        print('Failed to load history: $e');
+        if (e.toString().contains('暂无情侣关系')) {
+          _couple = null;
+        } else {
+          print('Unexpected error loading couple info: $e');
+        }
       }
     } catch (e) {
       setState(() {
@@ -95,69 +66,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _showInviteDialog() async {
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => const InviteCoupleDialog(),
-    );
 
-    if (result != null && result.isNotEmpty) {
-      await _inviteCouple(result);
-    }
-  }
-
-  Future<void> _inviteCouple(String username) async {
-    try {
-      await CoupleApiService.invite(username);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('邀请发送成功！'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        _loadData(); // Reload data
-      }
-    } catch (e) {
-      if (mounted) {
-        // 提取错误信息，去掉"Exception: "前缀
-        String errorMessage = e.toString();
-        if (errorMessage.startsWith('Exception: ')) {
-          errorMessage = errorMessage.substring(11);
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    return DateFormat('MM-dd HH:mm').format(date);
-  }
-
-  Color _getPointsColor(int points) {
-    if (points > 0) return AppColors.success;
-    if (points < 0) return AppColors.error;
-    return AppColors.onSurfaceVariant;
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('首页'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
-      ),
+      backgroundColor: AppColors.background, // 温暖的白色背景
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -165,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_error!, style: AppTextStyles.error),
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: _loadData,
@@ -178,244 +92,380 @@ class _HomeScreenState extends State<HomeScreen> {
                   onRefresh: _loadData,
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildUserCard(),
-                        const SizedBox(height: 16),
-                        _buildCoupleCard(),
-                        const SizedBox(height: 16),
-                        if (_recentHistory.isNotEmpty) _buildRecentActivity(),
+                        _buildTitle(),
+                        const SizedBox(height: 24),
+                        _buildPointsCards(),
+                        const SizedBox(height: 32),
+                        _buildShopsSection(),
+                        const SizedBox(height: 32),
+                        _buildQuickActions(),
                       ],
                     ),
                   ),
                 ),
-      floatingActionButton: _couple != null
-          ? FloatingActionButton(
-              onPressed: () {
-                // Show quick actions menu
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => _buildQuickActionsSheet(),
-                );
-              },
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 
-  Widget _buildUserCard() {
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, child) {
-        final user = userProvider.user;
-        if (user == null) return const SizedBox.shrink();
-
-        return Card(
-          color: AppColors.primaryContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: AppColors.primary,
-                  child: const Icon(
-                    Icons.person,
-                    size: 30,
-                    color: AppColors.onPrimary,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.username,
-                        style: AppTextStyles.username,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.diamond,
-                            size: 20,
-                            color: AppColors.coin,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${user.points} 积分',
-                            style: AppTextStyles.points,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCoupleCard() {
-    if (_couple != null) {
-      return Card(
-        color: AppColors.secondaryContainer,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.favorite,
-                    color: AppColors.heart,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '我的情侣',
-                    style: AppTextStyles.coupleTitle,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 25,
-                    backgroundColor: AppColors.secondary,
-                    child: const Icon(
-                      Icons.favorite,
-                      color: AppColors.onSecondary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _couple!.partner.username,
-                          style: AppTextStyles.partnerName,
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.diamond,
-                              size: 16,
-                              color: AppColors.coin,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${_couple!.partner.points} 积分',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: AppColors.onSecondaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      return Card(
-        color: AppColors.surfaceVariant,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              const Icon(
-                Icons.favorite_border,
-                size: 48,
-                color: AppColors.onSurfaceVariant,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '还没有情侣',
-                style: AppTextStyles.subtitle,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '邀请你的另一半加入吧！',
-                style: AppTextStyles.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _showInviteDialog,
-                icon: const Icon(Icons.favorite_border),
-                label: const Text('邀请情侣'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-  }
-
-  Widget _buildRecentActivity() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '最近活动',
-              style: AppTextStyles.subtitle,
-            ),
-            const SizedBox(height: 12),
-            ...(_recentHistory.map((item) => _buildHistoryItem(item))),
-          ],
+  // 构建标题
+  Widget _buildTitle() {
+    return const Center(
+      child: Text(
+        '小小卖部',
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.bold,
+          color: AppColors.onBackground, // 深棕色
         ),
       ),
     );
   }
 
-  Widget _buildHistoryItem(PointsHistory item) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+  // 构建积分卡片
+  Widget _buildPointsCards() {
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, child) {
+        final user = userProvider.user;
+        if (user == null) return const SizedBox.shrink();
+
+        return Row(
+          children: [
+            Expanded(
+              child: _buildPointCard(
+                user.username,
+                user.points,
+                user.avatar,
+                AppColors.primaryContainer, // 非常浅的桃色
+                AppColors.primary, // 温暖桃粉色
+                Icons.favorite,
+                true, // 是自己
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _couple != null
+                  ? _buildPointCard(
+                      _couple!.partner.username,
+                      _couple!.partner.points,
+                      _couple!.partner.avatar,
+                      AppColors.accentContainer, // 浅薄荷绿
+                      AppColors.accent, // 薄荷绿
+                      Icons.favorite,
+                      false, // 是对方
+                    )
+                  : _buildEmptyPointCard(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 构建单个积分卡片
+  Widget _buildPointCard(String name, int points, String? avatar, Color bgColor, Color iconColor, IconData icon, bool isCurrentUser) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Row(
         children: [
+          // 左侧：大头像
+          UserAvatar(
+            avatar: avatar,
+            size: 60,
+            borderColor: iconColor,
+            borderWidth: 3,
+          ),
+          const SizedBox(width: 16),
+          // 右侧：两行文字
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppColors.onBackground, // 深棕色
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: ' 的积分',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.onSurfaceVariant, // 稍浅的棕色
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  points.toString(),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onBackground, // 深棕色
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建空的积分卡片（当没有情侣时）
+  Widget _buildEmptyPointCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.disabled,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '等待情侣',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.onDisabled,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.disabledContainer,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.favorite_border,
+                  color: AppColors.onDisabled,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                '--',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.onDisabled,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建小卖部部分
+  Widget _buildShopsSection() {
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, child) {
+        final user = userProvider.user;
+        if (user == null) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '我们的小卖部',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.onBackground, // 深棕色
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildShopCard(
+              '${user.username}的小卖部',
+              '${user.username}的小卖部',
+              '5 件商品',
+              '管理',
+              AppColors.primaryContainer, // 非常浅的桃色
+              AppColors.primary, // 温暖桃粉色
+              () => context.push('/my-shop'),
+            ),
+            const SizedBox(height: 12),
+            _couple != null
+                ? _buildShopCard(
+                    '${_couple!.partner.username}的小卖部',
+                    '${_couple!.partner.username}的小卖部',
+                    '3 件商品',
+                    '逛逛',
+                    AppColors.accentContainer, // 浅薄荷绿
+                    AppColors.accent, // 薄荷绿
+                    () => context.go('/shop'),
+                  )
+                : _buildEmptyShopCard(),
+          ],
+        );
+      },
+    );
+  }
+
+  // 构建小卖部卡片
+  Widget _buildShopCard(String title, String subtitle, String itemCount, String buttonText, Color bgColor, Color iconColor, VoidCallback onTap) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.store,
+              color: iconColor,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.description,
-                  style: AppTextStyles.historyDescription,
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onBackground, // 深棕色
+                  ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
-                  _formatDate(item.createdAt),
-                  style: AppTextStyles.historyDate,
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.onBackground, // 深棕色
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  itemCount,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: onTap,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: iconColor,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                buttonText,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建空的小卖部卡片
+  Widget _buildEmptyShopCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.disabled,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: AppColors.disabledContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.store_outlined,
+              color: AppColors.onDisabled,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '等待情侣的小卖部',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onDisabled,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '邀请情侣后可查看',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.onDisabled,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '-- 件商品',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onDisabled,
+                  ),
                 ),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: _getPointsColor(item.points).withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+              color: AppColors.disabledContainer,
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(
-              '${item.points > 0 ? '+' : ''}${item.points}',
+            child: const Text(
+              '等待',
               style: TextStyle(
-                color: _getPointsColor(item.points),
+                color: AppColors.onDisabled,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -425,43 +475,300 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildQuickActionsSheet() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            '快速操作',
-            style: AppTextStyles.subtitle,
+  // 构建快捷操作
+  Widget _buildQuickActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '快捷操作',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.onBackground, // 深棕色
           ),
-          const SizedBox(height: 16),
-          ListTile(
-            leading: const Icon(Icons.event),
-            title: const Text('创建事件'),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/events');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.rule),
-            title: const Text('执行规则'),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/rules');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.store),
-            title: const Text('购买商品'),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/shop');
-            },
-          ),
-        ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickActionButton(
+                '创建约定',
+                Icons.add,
+                AppColors.primaryContainer, // 非常浅的桃色
+                AppColors.primary, // 温暖桃粉色
+                () => context.go('/rules'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionButton(
+                '特殊事件',
+                Icons.card_giftcard,
+                AppColors.accentContainer, // 浅薄荷绿
+                AppColors.accent, // 薄荷绿
+                () => _showCreateEventDialog(),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // 构建快捷操作按钮
+  Widget _buildQuickActionButton(String title, IconData icon, Color bgColor, Color iconColor, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(25),
+              ),
+              child: Icon(
+                icon,
+                color: iconColor,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.onBackground, // 深棕色
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  // 显示创建事件对话框
+  Future<void> _showCreateEventDialog() async {
+    if (_couple == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('需要先添加情侣才能使用事件功能'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.user;
+    if (currentUser == null) return;
+
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final pointsController = TextEditingController();
+    int targetId = currentUser.id;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('创建特殊事件'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.85,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: '事件名称',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.event),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: InputDecoration(
+                      labelText: '事件描述',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.description),
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: pointsController,
+                    decoration: InputDecoration(
+                      labelText: '积分变化（正数为奖励，负数为惩罚）',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.diamond),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '目标对象:',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // 紧凑的单选按钮布局
+                  Column(
+                    children: [
+                      RadioListTile<int>(
+                        title: const Text('对我'),
+                        value: currentUser.id,
+                        groupValue: targetId,
+                        activeColor: AppColors.primary,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            targetId = value!;
+                          });
+                        },
+                      ),
+                      RadioListTile<int>(
+                        title: Text('对${_couple!.partner.username}'),
+                        value: _couple!.partner.id,
+                        groupValue: targetId,
+                        activeColor: AppColors.primary,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            targetId = value!;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                '取消',
+                style: TextStyle(color: AppColors.onSurfaceVariant),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.onPrimary,
+              ),
+              child: const Text('创建'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      await _createEvent(
+        targetId,
+        nameController.text.trim(),
+        descriptionController.text.trim(),
+        pointsController.text.trim(),
+      );
+    }
+  }
+
+  // 创建事件
+  Future<void> _createEvent(int targetId, String name, String description, String pointsStr) async {
+    if (name.isEmpty || pointsStr.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('请填写事件名称和积分'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final points = int.tryParse(pointsStr);
+    if (points == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('请输入有效的积分值'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await EventsApiService.createEvent(
+        targetId: targetId,
+        name: name,
+        description: description,
+        points: points,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('事件创建成功！'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+
+        // 如果目标是当前用户，更新积分显示
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        if (targetId == userProvider.user?.id) {
+          userProvider.updateUserPoints((userProvider.user?.points ?? 0) + points);
+        }
+
+        // 重新加载数据以更新显示
+        _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('创建事件失败: ${_getErrorMessage(e)}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  // 获取错误信息
+  String _getErrorMessage(dynamic error) {
+    if (error.toString().contains('需要先添加情侣')) {
+      return '需要先添加情侣才能使用事件功能';
+    }
+    if (error.toString().contains('只能为自己或情侣创建事件')) {
+      return '只能为自己或情侣创建事件';
+    }
+    return error.toString().replaceAll('Exception: ', '');
+  }
+
 }

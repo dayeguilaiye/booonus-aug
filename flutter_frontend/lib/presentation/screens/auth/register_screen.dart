@@ -47,6 +47,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.push('/settings'),
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.onSurface,
+        elevation: 2,
+        mini: true,
+        child: const Icon(Icons.settings),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       appBar: AppBar(
         title: const Text('注册'),
         backgroundColor: Colors.transparent,
@@ -57,14 +66,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    MediaQuery.of(context).padding.bottom -
+                    kToolbarHeight - 48, // Account for padding and AppBar
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 // Logo and title
                 const Icon(
                   Icons.person_add,
@@ -73,13 +89,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  '创建账号',
+                  '开店咯！',
                   style: AppTextStyles.title,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  '加入 Booonus 开始你们的积分之旅',
+                  '开始经营一个小小卖部吧！',
                   style: AppTextStyles.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -204,6 +220,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
               ],
+            ),
             ),
           ),
         ),

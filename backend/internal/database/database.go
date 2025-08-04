@@ -40,6 +40,11 @@ func Init() error {
 		return err
 	}
 
+	// 运行数据库迁移
+	if err = runMigrations(); err != nil {
+		return err
+	}
+
 	logger.Info("Database tables created successfully")
 	return nil
 }
@@ -52,6 +57,7 @@ func createTables() error {
 			username TEXT UNIQUE NOT NULL,
 			password TEXT NOT NULL,
 			points INTEGER DEFAULT 0,
+			avatar TEXT,
 			couple_id INTEGER,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -136,6 +142,50 @@ func createTables() error {
 		if _, err := DB.Exec(query); err != nil {
 			logger.Error("Failed to create table: " + err.Error())
 			return err
+		}
+	}
+
+	return nil
+}
+
+// runMigrations 运行数据库迁移
+func runMigrations() error {
+	// 检查avatar字段是否存在，如果不存在则添加
+	var columnExists bool
+	err := DB.QueryRow("PRAGMA table_info(users)").Scan()
+	if err != nil {
+		// 检查avatar列是否存在
+		rows, err := DB.Query("PRAGMA table_info(users)")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var cid int
+			var name, dataType string
+			var notNull, pk int
+			var defaultValue interface{}
+
+			err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk)
+			if err != nil {
+				return err
+			}
+
+			if name == "avatar" {
+				columnExists = true
+				break
+			}
+		}
+
+		if !columnExists {
+			// 添加avatar字段
+			_, err = DB.Exec("ALTER TABLE users ADD COLUMN avatar TEXT")
+			if err != nil {
+				logger.Error("Failed to add avatar column: " + err.Error())
+				return err
+			}
+			logger.Info("Added avatar column to users table")
 		}
 	}
 

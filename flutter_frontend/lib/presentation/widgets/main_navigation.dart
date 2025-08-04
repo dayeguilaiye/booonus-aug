@@ -32,12 +32,7 @@ class MainNavigation extends StatelessWidget {
           BottomNavigationBarItem(
             icon: Icon(Icons.rule_outlined),
             activeIcon: Icon(Icons.rule),
-            label: '规则',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.event_outlined),
-            activeIcon: Icon(Icons.event),
-            label: '事件',
+            label: '约定',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outlined),
@@ -60,11 +55,8 @@ class MainNavigation extends StatelessWidget {
     if (location.startsWith('/rules')) {
       return 2;
     }
-    if (location.startsWith('/events')) {
-      return 3;
-    }
     if (location.startsWith('/profile')) {
-      return 4;
+      return 3;
     }
     return 0;
   }
@@ -81,9 +73,6 @@ class MainNavigation extends StatelessWidget {
         context.go('/rules');
         break;
       case 3:
-        context.go('/events');
-        break;
-      case 4:
         context.go('/profile');
         break;
     }

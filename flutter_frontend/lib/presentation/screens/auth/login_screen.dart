@@ -44,6 +44,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.push('/settings'),
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.onSurface,
+        elevation: 2,
+        mini: true,
+        child: const Icon(Icons.settings),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -60,20 +69,33 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                 // Logo and title
-                const Icon(
-                  Icons.favorite,
-                  size: 80,
-                  color: AppColors.heart,
+                SizedBox(
+                  height: 80,
+                  width: 80,
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    height: 80,
+                    width: 80,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      // 如果图片加载失败，显示原来的图标
+                      return const Icon(
+                        Icons.favorite,
+                        size: 80,
+                        color: AppColors.heart,
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Booonus',
+                  '小小卖部',
                   style: AppTextStyles.title,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  '情侣积分管理',
+                  '欢迎光临',
                   style: AppTextStyles.bodySmall,
                   textAlign: TextAlign.center,
                 ),
