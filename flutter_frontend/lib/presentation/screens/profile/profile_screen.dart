@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/services/shop_api_service.dart';
+import '../../../core/services/couple_api_service.dart';
+import '../../../core/models/couple.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../widgets/user_avatar.dart';
 import 'avatar_selection_screen.dart';
@@ -19,11 +21,12 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   int _itemCount = 0;
   bool _isLoading = true;
+  Couple? _couple;
 
   @override
   void initState() {
     super.initState();
-    _loadItemCount();
+    _loadData();
   }
 
   // 导航到头像选择页面
@@ -35,21 +38,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _loadItemCount() async {
+  // 导航到积分记录页面
+  void _navigateToPointsHistory(bool isMyHistory) {
+    if (isMyHistory) {
+      context.push('/points-history/my');
+    } else {
+      final targetUserId = _couple?.partner.id;
+      if (targetUserId != null) {
+        context.push('/points-history/partner?targetUserId=$targetUserId');
+      }
+    }
+  }
+
+  Future<void> _loadData() async {
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final user = userProvider.user;
+
       if (user != null) {
-        final response = await ShopApiService.getItems(ownerId: user.id);
-        final items = response['items'] as List<dynamic>? ?? [];
+        // 加载商品数量
+        final itemsResponse = await ShopApiService.getItems(ownerId: user.id);
+        final items = itemsResponse['items'] as List<dynamic>? ?? [];
+
+        // 加载情侣信息
+        Couple? couple;
+        try {
+          final coupleResponse = await CoupleApiService.getCouple();
+          if (coupleResponse['couple'] != null) {
+            couple = Couple.fromJson(coupleResponse['couple']);
+          }
+        } catch (e) {
+          // 如果没有情侣关系，couple保持为null
+          if (!e.toString().contains('暂无情侣关系')) {
+            print('Unexpected error loading couple info: $e');
+          }
+        }
+
         setState(() {
           _itemCount = items.length;
+          _couple = couple;
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
         _itemCount = 0;
+        _couple = null;
         _isLoading = false;
       });
     }
@@ -179,6 +213,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
           _buildSettingItem(
+            icon: Icons.history,
+            iconColor: AppColors.primary, // 温暖桃粉色
+            title: '我的积分记录',
+            subtitle: '查看我的积分变化历史',
+            onTap: () => _navigateToPointsHistory(true),
+          ),
+          const SizedBox(height: 16),
+          _buildSettingItem(
+            icon: Icons.people,
+            iconColor: AppColors.accent, // 薄荷绿
+            title: '对方的积分记录',
+            subtitle: _couple != null ? '查看${_couple!.partner.username}的积分变化历史' : '需要建立情侣关系',
+            onTap: _couple != null ? () => _navigateToPointsHistory(false) : null,
+          ),
+          const SizedBox(height: 16),
+          _buildSettingItem(
             icon: Icons.notifications,
             iconColor: AppColors.primary, // 温暖桃粉色
             title: '通知设置',
@@ -216,15 +266,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color iconColor,
     required String title,
     required String subtitle,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque, // 确保整个区域都可以点击
-      child: Container(
-        width: double.infinity, // 确保容器占满整个宽度
-        padding: const EdgeInsets.symmetric(vertical: 8), // 增加垂直点击区域
-        child: Row(
+      child: Opacity(
+        opacity: onTap != null ? 1.0 : 0.5, // 当不可点击时降低透明度
+        child: Container(
+          width: double.infinity, // 确保容器占满整个宽度
+          padding: const EdgeInsets.symmetric(vertical: 8), // 增加垂直点击区域
+          child: Row(
           children: [
             Container(
               width: 40,
@@ -270,6 +322,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

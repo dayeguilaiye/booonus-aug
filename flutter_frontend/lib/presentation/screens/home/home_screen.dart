@@ -4,9 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/user_provider.dart';
 import '../../../core/services/couple_api_service.dart';
+import '../../../core/services/shop_api_service.dart';
 import '../../../core/models/couple.dart';
 import '../../../core/services/events_api_service.dart';
-import '../../widgets/user_avatar.dart';
+import '../../widgets/points_cards_widget.dart';
 import '../../../core/theme/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,6 +21,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Couple? _couple;
   bool _isLoading = true;
   String? _error;
+  int _myItemCount = 0;
+  int _partnerItemCount = 0;
 
   @override
   void initState() {
@@ -39,22 +42,50 @@ class _HomeScreenState extends State<HomeScreen> {
       // Load user profile
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       await userProvider.loadUserProfile();
+      final user = userProvider.user;
 
       // Load couple info
+      Couple? couple;
       try {
         final coupleResponse = await CoupleApiService.getCouple();
         if (coupleResponse['couple'] != null) {
-          _couple = Couple.fromJson(coupleResponse['couple']);
-        } else {
-          _couple = null;
+          couple = Couple.fromJson(coupleResponse['couple']);
         }
       } catch (e) {
-        if (e.toString().contains('暂无情侣关系')) {
-          _couple = null;
-        } else {
+        if (!e.toString().contains('暂无情侣关系')) {
           print('Unexpected error loading couple info: $e');
         }
       }
+
+      // Load my shop items count
+      int myItemCount = 0;
+      if (user != null) {
+        try {
+          final myItemsResponse = await ShopApiService.getItems(ownerId: user.id);
+          final myItems = myItemsResponse['items'] as List<dynamic>? ?? [];
+          myItemCount = myItems.length;
+        } catch (e) {
+          print('Error loading my items: $e');
+        }
+      }
+
+      // Load partner's shop items count
+      int partnerItemCount = 0;
+      if (couple != null) {
+        try {
+          final partnerItemsResponse = await ShopApiService.getItems(ownerId: couple.partner.id);
+          final partnerItems = partnerItemsResponse['items'] as List<dynamic>? ?? [];
+          partnerItemCount = partnerItems.length;
+        } catch (e) {
+          print('Error loading partner items: $e');
+        }
+      }
+
+      setState(() {
+        _couple = couple;
+        _myItemCount = myItemCount;
+        _partnerItemCount = partnerItemCount;
+      });
     } catch (e) {
       setState(() {
         _error = '加载数据失败：${e.toString()}';
@@ -126,156 +157,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 构建积分卡片
   Widget _buildPointsCards() {
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, child) {
-        final user = userProvider.user;
-        if (user == null) return const SizedBox.shrink();
-
-        return Row(
-          children: [
-            Expanded(
-              child: _buildPointCard(
-                user.username,
-                user.points,
-                user.avatar,
-                AppColors.primaryContainer, // 非常浅的桃色
-                AppColors.primary, // 温暖桃粉色
-                Icons.favorite,
-                true, // 是自己
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _couple != null
-                  ? _buildPointCard(
-                      _couple!.partner.username,
-                      _couple!.partner.points,
-                      _couple!.partner.avatar,
-                      AppColors.accentContainer, // 浅薄荷绿
-                      AppColors.accent, // 薄荷绿
-                      Icons.favorite,
-                      false, // 是对方
-                    )
-                  : _buildEmptyPointCard(),
-            ),
-          ],
-        );
-      },
-    );
+    return PointsCardsWidget(couple: _couple);
   }
 
-  // 构建单个积分卡片
-  Widget _buildPointCard(String name, int points, String? avatar, Color bgColor, Color iconColor, IconData icon, bool isCurrentUser) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          // 左侧：大头像
-          UserAvatar(
-            avatar: avatar,
-            size: 60,
-            borderColor: iconColor,
-            borderWidth: 3,
-          ),
-          const SizedBox(width: 16),
-          // 右侧：两行文字
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          color: AppColors.onBackground, // 深棕色
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const TextSpan(
-                        text: ' 的积分',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.onSurfaceVariant, // 稍浅的棕色
-                          fontWeight: FontWeight.normal,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  points.toString(),
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.onBackground, // 深棕色
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  // 构建空的积分卡片（当没有情侣时）
-  Widget _buildEmptyPointCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.disabled,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '等待情侣',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.onDisabled,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.disabledContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  Icons.favorite_border,
-                  color: AppColors.onDisabled,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                '--',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.onDisabled,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   // 构建小卖部部分
   Widget _buildShopsSection() {
@@ -299,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildShopCard(
               '${user.username}的小卖部',
               '${user.username}的小卖部',
-              '5 件商品',
+              '$_myItemCount 件商品',
               '管理',
               AppColors.primaryContainer, // 非常浅的桃色
               AppColors.primary, // 温暖桃粉色
@@ -310,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? _buildShopCard(
                     '${_couple!.partner.username}的小卖部',
                     '${_couple!.partner.username}的小卖部',
-                    '3 件商品',
+                    '$_partnerItemCount 件商品',
                     '逛逛',
                     AppColors.accentContainer, // 浅薄荷绿
                     AppColors.accent, // 薄荷绿

@@ -1,10 +1,23 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'app_colors.dart';
 
 class AppTheme {
+  /// 获取平台特定的字体系列
+  static String? get _platformFontFamily {
+    if (Platform.isIOS) {
+      // iOS 使用系统默认字体，避免字体加载问题
+      return null;
+    } else if (Platform.isAndroid) {
+      return 'Roboto';
+    }
+    return null;
+  }
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: _platformFontFamily,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         primaryContainer: AppColors.primaryContainer,
@@ -128,6 +141,103 @@ class AppTheme {
       dividerTheme: const DividerThemeData(
         color: AppColors.outline,
         thickness: 1,
+      ),
+
+      // Text Theme - 优化跨平台文本渲染
+      textTheme: TextTheme(
+        displayLarge: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: AppColors.onBackground,
+        ),
+        displayMedium: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 28,
+          fontWeight: FontWeight.bold,
+          color: AppColors.onBackground,
+        ),
+        displaySmall: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: AppColors.onBackground,
+        ),
+        headlineLarge: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          color: AppColors.onBackground,
+        ),
+        headlineMedium: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: AppColors.onBackground,
+        ),
+        headlineSmall: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: AppColors.onBackground,
+        ),
+        titleLarge: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: AppColors.onBackground,
+        ),
+        titleMedium: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.onBackground,
+        ),
+        titleSmall: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.onSurfaceVariant,
+        ),
+        bodyLarge: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 16,
+          fontWeight: FontWeight.normal,
+          color: AppColors.onBackground,
+          height: 1.5,
+        ),
+        bodyMedium: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 14,
+          fontWeight: FontWeight.normal,
+          color: AppColors.onBackground,
+          height: 1.4,
+        ),
+        bodySmall: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 12,
+          fontWeight: FontWeight.normal,
+          color: AppColors.onSurfaceVariant,
+          height: 1.3,
+        ),
+        labelLarge: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.onBackground,
+        ),
+        labelMedium: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.onSurfaceVariant,
+        ),
+        labelSmall: TextStyle(
+          fontFamily: _platformFontFamily,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: AppColors.onSurfaceVariant,
+        ),
       ),
     );
   }

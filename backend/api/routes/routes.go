@@ -38,6 +38,7 @@ func SetupRoutes() *gin.Engine {
 		// 积分相关
 		protected.GET("/points", handlers.GetPoints)
 		protected.GET("/points/history", handlers.GetPointsHistory)
+		protected.GET("/points/history/:user_id", handlers.GetUserPointsHistory)
 
 		// 小卖部
 		protected.GET("/shop", handlers.GetShopItems)

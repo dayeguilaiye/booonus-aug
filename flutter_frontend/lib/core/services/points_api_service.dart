@@ -15,6 +15,15 @@ class PointsApiService {
     });
     return response.data;
   }
+
+  // 获取指定用户的积分历史（用于查看对方的积分记录）
+  static Future<Map<String, dynamic>> getUserHistory(int userId, {int limit = 50, int offset = 0}) async {
+    final response = await apiService.get('/points/history/$userId', queryParameters: {
+      'limit': limit,
+      'offset': offset,
+    });
+    return response.data;
+  }
   
   // 撤销操作
   static Future<Map<String, dynamic>> revert(int historyId) async {

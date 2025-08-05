@@ -14,6 +14,7 @@ import 'presentation/screens/shop/shop_screen.dart';
 import 'presentation/screens/shop/my_shop_screen.dart';
 import 'presentation/screens/rules/rules_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
+import 'presentation/screens/profile/points_history_screen.dart';
 import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/widgets/main_navigation.dart';
 
@@ -43,6 +44,18 @@ class BoooonusApp extends StatelessWidget {
             theme: AppTheme.lightTheme,
             routerConfig: _createRouter(authProvider),
             debugShowCheckedModeBanner: false,
+            // 控制文本缩放，确保跨平台一致性
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  // 限制文本缩放因子，避免过度缩放导致布局问题
+                  textScaler: TextScaler.linear(
+                    MediaQuery.of(context).textScaler.scale(1.0).clamp(0.8, 1.3),
+                  ),
+                ),
+                child: child!,
+              );
+            },
           );
         },
       ),
@@ -115,6 +128,24 @@ class BoooonusApp extends StatelessWidget {
         GoRoute(
           path: '/my-shop',
           builder: (context, state) => const MyShopScreen(),
+        ),
+
+        // Points History routes (outside main navigation)
+        GoRoute(
+          path: '/points-history/my',
+          builder: (context, state) => const PointsHistoryScreen(
+            isMyHistory: true,
+          ),
+        ),
+        GoRoute(
+          path: '/points-history/partner',
+          builder: (context, state) {
+            final targetUserId = state.uri.queryParameters['targetUserId'];
+            return PointsHistoryScreen(
+              isMyHistory: false,
+              targetUserId: targetUserId != null ? int.tryParse(targetUserId) : null,
+            );
+          },
         ),
       ],
     );

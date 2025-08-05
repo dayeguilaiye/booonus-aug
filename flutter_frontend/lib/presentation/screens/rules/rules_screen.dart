@@ -8,6 +8,7 @@ import '../../../core/services/couple_api_service.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../widgets/user_avatar.dart';
+import '../../widgets/points_cards_widget.dart';
 
 class RulesScreen extends StatefulWidget {
   const RulesScreen({super.key});
@@ -387,156 +388,10 @@ class _RulesScreenState extends State<RulesScreen> {
 
   // 构建积分卡片
   Widget _buildPointsCards() {
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, child) {
-        final user = userProvider.user;
-        if (user == null) return const SizedBox.shrink();
-
-        return Row(
-          children: [
-            Expanded(
-              child: _buildPointCard(
-                user.username,
-                user.points,
-                user.avatar,
-                AppColors.primaryContainer, // 非常浅的桃色
-                AppColors.primary, // 温暖桃粉色
-                Icons.favorite,
-                true, // 是自己
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _couple != null
-                  ? _buildPointCard(
-                      _couple!.partner.username,
-                      _couple!.partner.points,
-                      _couple!.partner.avatar,
-                      AppColors.accentContainer, // 浅薄荷绿
-                      AppColors.accent, // 薄荷绿
-                      Icons.favorite,
-                      false, // 是对方
-                    )
-                  : _buildEmptyPointCard(),
-            ),
-          ],
-        );
-      },
-    );
+    return PointsCardsWidget(couple: _couple);
   }
 
-  // 构建单个积分卡片
-  Widget _buildPointCard(String name, int points, String? avatar, Color bgColor, Color iconColor, IconData icon, bool isCurrentUser) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          // 左侧：大头像
-          UserAvatar(
-            avatar: avatar,
-            size: 60,
-            borderColor: iconColor,
-            borderWidth: 3,
-          ),
-          const SizedBox(width: 16),
-          // 右侧：两行文字
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          color: AppColors.onBackground, // 深棕色
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const TextSpan(
-                        text: ' 的积分',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.onSurfaceVariant, // 稍浅的棕色
-                          fontWeight: FontWeight.normal,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  points.toString(),
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.onBackground, // 深棕色
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  // 构建空的积分卡片（当没有情侣时）
-  Widget _buildEmptyPointCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.disabled,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '等待情侣',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.onDisabled,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.disabledContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  Icons.favorite_border,
-                  color: AppColors.onDisabled,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                '--',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.onDisabled,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   // 构建约定部分
   Widget _buildRulesSection() {

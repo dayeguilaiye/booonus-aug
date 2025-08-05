@@ -36,20 +36,20 @@ func GetPointsHistory(c *gin.Context) {
 	// 获取查询参数
 	limitStr := c.DefaultQuery("limit", "50")
 	offsetStr := c.DefaultQuery("offset", "0")
-	
+
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
 
 	// 查询积分历史
 	query := `
-		SELECT id, user_id, points, type, reference_id, description, 
+		SELECT id, user_id, points, type, reference_id, description,
 		       can_revert, is_reverted, created_at
-		FROM points_history 
-		WHERE user_id = ? 
-		ORDER BY created_at DESC 
+		FROM points_history
+		WHERE user_id = ?
+		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
 	`
-	
+
 	rows, err := database.DB.Query(query, userID, limit, offset)
 	if err != nil {
 		logger.Error("Failed to get points history: " + err.Error())
@@ -62,7 +62,7 @@ func GetPointsHistory(c *gin.Context) {
 	for rows.Next() {
 		var h models.PointsHistory
 		var referenceID sql.NullInt64
-		
+
 		err := rows.Scan(
 			&h.ID, &h.UserID, &h.Points, &h.Type, &referenceID,
 			&h.Description, &h.CanRevert, &h.IsReverted, &h.CreatedAt,
@@ -71,12 +71,12 @@ func GetPointsHistory(c *gin.Context) {
 			logger.Error("Failed to scan points history: " + err.Error())
 			continue
 		}
-		
+
 		if referenceID.Valid {
 			refID := int(referenceID.Int64)
 			h.ReferenceID = &refID
 		}
-		
+
 		history = append(history, h)
 	}
 
@@ -96,13 +96,93 @@ func GetPointsHistory(c *gin.Context) {
 	})
 }
 
+// GetUserPointsHistory 获取指定用户的积分变化历史
+func GetUserPointsHistory(c *gin.Context) {
+	userID := c.GetInt("user_id")
+	targetUserIDStr := c.Param("user_id")
+
+	targetUserID, err := strconv.Atoi(targetUserIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// 检查权限：只能查看自己或情侣的积分历史
+	if !canUserRevertHistory(userID, targetUserID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+		return
+	}
+
+	// 获取查询参数
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, _ := strconv.Atoi(limitStr)
+	offset, _ := strconv.Atoi(offsetStr)
+
+	// 查询积分历史
+	query := `
+		SELECT id, user_id, points, type, reference_id, description,
+		       can_revert, is_reverted, created_at
+		FROM points_history
+		WHERE user_id = ?
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := database.DB.Query(query, targetUserID, limit, offset)
+	if err != nil {
+		logger.Error("Failed to get user points history: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get points history"})
+		return
+	}
+	defer rows.Close()
+
+	var history []models.PointsHistory
+	for rows.Next() {
+		var h models.PointsHistory
+		var referenceID sql.NullInt64
+
+		err := rows.Scan(
+			&h.ID, &h.UserID, &h.Points, &h.Type, &referenceID,
+			&h.Description, &h.CanRevert, &h.IsReverted, &h.CreatedAt,
+		)
+		if err != nil {
+			logger.Error("Failed to scan user points history: " + err.Error())
+			continue
+		}
+
+		if referenceID.Valid {
+			refID := int(referenceID.Int64)
+			h.ReferenceID = &refID
+		}
+
+		history = append(history, h)
+	}
+
+	// 获取总数
+	var total int
+	err = database.DB.QueryRow("SELECT COUNT(*) FROM points_history WHERE user_id = ?", targetUserID).Scan(&total)
+	if err != nil {
+		logger.Error("Failed to get user points history count: " + err.Error())
+		total = len(history)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"history": history,
+		"total":   total,
+		"limit":   limit,
+		"offset":  offset,
+	})
+}
+
 // addPointsHistory 添加积分历史记录（内部函数）
 func addPointsHistory(tx *sql.Tx, userID, points int, historyType string, referenceID *int, description string, canRevert bool) error {
 	var refID interface{}
 	if referenceID != nil {
 		refID = *referenceID
 	}
-	
+
 	_, err := tx.Exec(
 		"INSERT INTO points_history (user_id, points, type, reference_id, description, can_revert) VALUES (?, ?, ?, ?, ?, ?)",
 		userID, points, historyType, refID, description, canRevert,
@@ -120,7 +200,7 @@ func updateUserPoints(tx *sql.Tx, userID, pointsChange int) error {
 func RevertOperation(c *gin.Context) {
 	userID := c.GetInt("user_id")
 	historyIDStr := c.Param("id")
-	
+
 	historyID, err := strconv.Atoi(historyIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid history ID"})
@@ -130,12 +210,12 @@ func RevertOperation(c *gin.Context) {
 	// 获取历史记录
 	var history models.PointsHistory
 	var referenceID sql.NullInt64
-	
+
 	err = database.DB.QueryRow(
 		"SELECT id, user_id, points, type, reference_id, description, can_revert, is_reverted FROM points_history WHERE id = ?",
 		historyID,
 	).Scan(&history.ID, &history.UserID, &history.Points, &history.Type, &referenceID, &history.Description, &history.CanRevert, &history.IsReverted)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "History record not found"})
