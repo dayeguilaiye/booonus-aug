@@ -92,8 +92,6 @@ jobs:
       run: |
         echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > kubeconfig
         export KUBECONFIG=kubeconfig
-        # 跳过TLS验证（用于外部IP访问）
-        kubectl config set-cluster $(kubectl config current-context) --insecure-skip-tls-verify=true
         kubectl config current-context
         kubectl get nodes
 

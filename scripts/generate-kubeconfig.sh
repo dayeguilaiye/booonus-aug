@@ -47,6 +47,7 @@ clusters:
 - cluster:
     certificate-authority-data: ${CLUSTER_CA}
     server: ${CLUSTER_SERVER}
+    insecure-skip-tls-verify: true
   name: ${CLUSTER_NAME}
 contexts:
 - context:
