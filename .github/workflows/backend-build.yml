@@ -73,3 +73,63 @@ jobs:
         echo "**Repository:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
         echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
         echo "**Digest:** ${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl config current-context
+        kubectl get nodes
+
+    - name: Deploy to k3s
+      run: |
+        export KUBECONFIG=kubeconfig
+
+        # 获取最新的镜像标签
+        IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+
+        # 检查deployment是否存在
+        if kubectl get deployment booonus-deployment -n default >/dev/null 2>&1; then
+          echo "🔄 更新现有deployment..."
+          kubectl set image deployment/booonus-deployment backend=${IMAGE_TAG} -n default
+          kubectl rollout status deployment/booonus-deployment -n default --timeout=300s
+        else
+          echo "🆕 创建新的deployment..."
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/booonus-deployment -n default --timeout=300s
+        fi
+
+        # 验证部署状态
+        kubectl get pods -l app=booonus-deployment -n default
+        kubectl get services -l app=booonus-deployment -n default
+
+    - name: Deployment Summary
+      run: |
+        export KUBECONFIG=kubeconfig
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "**Namespace:** default" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployment:** booonus-deployment" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Pod Status" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        kubectl get pods -l app=booonus -n default >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+    - name: Clean up
+      if: always()
+      run: rm -f kubeconfig

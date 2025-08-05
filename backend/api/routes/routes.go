@@ -17,6 +17,7 @@ func SetupRoutes() *gin.Engine {
 	// 公开路由（不需要认证）
 	public := router.Group("/api/v1")
 	{
+		public.GET("/health", handlers.HealthCheck)
 		public.POST("/register", handlers.Register)
 		public.POST("/login", handlers.Login)
 	}

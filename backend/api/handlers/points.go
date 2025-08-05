@@ -12,6 +12,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// HealthCheck 健康检查端点
+func HealthCheck(c *gin.Context) {
+	// 检查数据库连接
+	if err := database.DB.Ping(); err != nil {
+		logger.Error("Database health check failed: " + err.Error())
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "unhealthy",
+			"error":  "Database connection failed",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "healthy",
+		"service": "booonus-backend",
+	})
+}
+
 // GetPoints 获取用户积分
 func GetPoints(c *gin.Context) {
 	userID := c.GetInt("user_id")
