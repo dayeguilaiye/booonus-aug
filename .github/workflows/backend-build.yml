@@ -103,18 +103,20 @@ jobs:
 
         # 检查deployment是否存在
         if kubectl get deployment booonus-deployment -n default >/dev/null 2>&1; then
-          echo "🔄 更新现有deployment..."
-          kubectl set image deployment/booonus-deployment booonus=${IMAGE_TAG} -n default
+          echo "🔄 强制重启deployment以拉取最新镜像..."
+
+          # 由于使用latest标签，直接重启deployment来强制拉取最新镜像
+          kubectl rollout restart deployment/booonus-deployment -n default
+
+          # 等待rollout完成
           kubectl rollout status deployment/booonus-deployment -n default --timeout=300s
-        else
-          echo "🆕 创建新的deployment..."
-          kubectl apply -f k8s/
-          kubectl rollout status deployment/booonus-deployment -n default --timeout=300s
+
+          echo "✅ Deployment重启完成"
         fi
 
-        # 验证部署状态
-        kubectl get pods -l app=booonus-deployment -n default
-        kubectl get services -l app=booonus-deployment -n default
+        # 显示最新的pod信息和镜像
+        echo "🔍 最新Pod详细信息:"
+        kubectl get pods -l app=booonus-deployment -n default -o wide
 
     - name: Deployment Summary
       run: |
