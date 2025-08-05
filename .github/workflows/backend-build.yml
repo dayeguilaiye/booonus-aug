@@ -104,7 +104,7 @@ jobs:
         # 检查deployment是否存在
         if kubectl get deployment booonus-deployment -n default >/dev/null 2>&1; then
           echo "🔄 更新现有deployment..."
-          kubectl set image deployment/booonus-deployment backend=${IMAGE_TAG} -n default
+          kubectl set image deployment/booonus-deployment booonus=${IMAGE_TAG} -n default
           kubectl rollout status deployment/booonus-deployment -n default --timeout=300s
         else
           echo "🆕 创建新的deployment..."
