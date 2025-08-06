@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>甜蜜积分商店</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Light blue-gray background */
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 1rem; /* Rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+        }
+        .section-title {
+            color: #334155; /* Darker text for titles */
+        }
+        .point-value-positive {
+            color: #10b981; /* Green for positive points */
+            font-weight: 600;
+        }
+        .point-value-negative {
+            color: #ef4444; /* Red for negative points */
+            font-weight: 600;
+        }
+        .product-price {
+            color: #3b82f6; /* Blue for product prices */
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 md:p-12 lg:p-16">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-extrabold text-indigo-700 mb-4 rounded-lg p-4 bg-gradient-to-r from-indigo-100 to-purple-100 shadow-lg">
+                💖 小小卖部开张咯 💖
+            </h1>
+            <p class="text-lg text-gray-600">
+                努力积分，享受生活！
+            </p>
+        </header>
+
+        <!-- Agreements Section -->
+        <section class="mb-16">
+            <h2 class="text-4xl font-bold text-gray-800 mb-8 text-center section-title">
+                📝 积分约定
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Agreements for Both -->
+                <div class="card p-6">
+                    <h3 class="text-2xl font-semibold text-gray-700 mb-4 border-b-2 border-indigo-200 pb-2">
+                        对双方生效的
+                    </h3>
+                    <ul class="space-y-3">
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>跑步</span>
+                            <span class="point-value-positive">+100</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>帮对方做忘了的事情</span>
+                            <span class="point-value-positive">+5</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>提醒该做的</span>
+                            <span class="point-value-positive">+3</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Agreements for Li Jiemo -->
+                <div class="card p-6">
+                    <h3 class="text-2xl font-semibold text-gray-700 mb-4 border-b-2 border-pink-200 pb-2">
+                        对李芥末生效的
+                    </h3>
+                    <ul class="space-y-3">
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>每周三次运动</span>
+                            <span class="point-value-positive">+10</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>不理人</span>
+                            <span class="point-value-negative">-80</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>额外运动</span>
+                            <span class="point-value-positive">+20</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>20个俯卧撑</span>
+                            <span class="point-value-positive">+5</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>刷新挂单杠时间</span>
+                            <span class="point-value-positive">+5</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>大薯片大辣条</span>
+                            <span class="point-value-negative">-30</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Agreements for He Lajiao -->
+                <div class="card p-6">
+                    <h3 class="text-2xl font-semibold text-gray-700 mb-4 border-b-2 border-emerald-200 pb-2">
+                        对何辣椒生效的
+                    </h3>
+                    <ul class="space-y-3">
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>连续五天打卡运动</span>
+                            <span class="point-value-positive">+10</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>忘洗袜子</span>
+                            <span class="point-value-negative">-10</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>大声吼</span>
+                            <span class="point-value-negative">-80</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>额外运动</span>
+                            <span class="point-value-positive">+30</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>按时涂药</span>
+                            <span class="point-value-positive">+2</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Products Section -->
+        <section>
+            <h2 class="text-4xl font-bold text-gray-800 mb-8 text-center section-title">
+                🎁 兑换商品
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Your Wife's Products (你的商品 - assuming this is the wife's) -->
+                <div class="card p-6">
+                    <h3 class="text-2xl font-semibold text-gray-700 mb-4 border-b-2 border-orange-200 pb-2">
+                        李芥末的商品
+                    </h3>
+                    <ul class="space-y-3">
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>冰淇淋</span>
+                            <span class="product-price">40 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>冰淇淋完整</span>
+                            <span class="product-price">70 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>陪我打游戏一小时</span>
+                            <span class="product-price">5 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>肉松吐司</span>
+                            <span class="product-price">10 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>麻辣牛肉</span>
+                            <span class="product-price">4 积分</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Your Products (我的商品 - user's) -->
+                <div class="card p-6">
+                    <h3 class="text-2xl font-semibold text-gray-700 mb-4 border-b-2 border-cyan-200 pb-2">
+                        何辣椒的商品
+                    </h3>
+                    <ul class="space-y-3">
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>一日周末旅游</span>
+                            <span class="product-price">20 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>二日周末旅游</span>
+                            <span class="product-price">40 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>开零食箱</span>
+                            <span class="product-price">5 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>过分开零食箱</span>
+                            <span class="product-price">10 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>糖醋排骨</span>
+                            <span class="product-price">10 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>帮吃服务</span>
+                            <span class="product-price">5 积分</span>
+                        </li>
+                        <li class="flex justify-between items-center text-lg text-gray-700">
+                            <span>早上买榴莲</span>
+                            <span class="product-price">20 积分</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <footer class="text-center mt-16 text-gray-500 text-sm">
+            <p>&copy; 2025 小小卖部. 祝您使用愉快！</p>
+        </footer>
+    </div>
+</body>
+</html>

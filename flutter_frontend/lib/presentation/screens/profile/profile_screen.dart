@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:screenshot/screenshot.dart';
+import 'dart:typed_data';
+import 'package:saver_gallery/saver_gallery.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/services/shop_api_service.dart';
 import '../../../core/services/couple_api_service.dart';
+import '../../../core/services/rules_api_service.dart';
 import '../../../core/models/couple.dart';
+import '../../../core/models/rule.dart';
+import '../../../core/models/shop_item.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../widgets/user_avatar.dart';
+import '../../widgets/export_page_widget.dart';
 import 'avatar_selection_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -22,6 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _itemCount = 0;
   bool _isLoading = true;
   Couple? _couple;
+  final ScreenshotController _screenshotController = ScreenshotController();
 
   @override
   void initState() {
@@ -249,6 +260,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
           _buildSettingItem(
+            icon: Icons.download,
+            iconColor: AppColors.accent, // 薄荷绿
+            title: '导出为图片',
+            subtitle: '生成约定和商品的图片版本',
+            onTap: _couple != null ? _exportToImage : null,
+          ),
+          const SizedBox(height: 16),
+          _buildSettingItem(
             icon: Icons.palette,
             iconColor: AppColors.primary, // 温暖桃粉色
             title: '应用设置',
@@ -407,5 +426,153 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  // 检查并请求权限
+  Future<bool> _checkAndRequestPermissions() async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return false; // 只支持Android和iOS平台
+    }
+
+    if (Platform.isAndroid) {
+      final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      final sdkInt = deviceInfo.version.sdkInt;
+
+      // Android SDK 29及以上版本不需要读权限来写入文件
+      return sdkInt >= 29 ? true : await Permission.storage.request().isGranted;
+    } else if (Platform.isIOS) {
+      // iOS权限，用于保存图片到相册
+      return await Permission.photosAddOnly.request().isGranted;
+    }
+
+    return false; // 不支持的平台
+  }
+
+  // 导出为图片
+  Future<void> _exportToImage() async {
+    try {
+      // 检查权限
+      final hasPermission = await _checkAndRequestPermissions();
+      if (!hasPermission) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('需要相册权限才能保存图片'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      // 显示加载提示
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('正在生成图片...'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+
+      // 获取当前用户信息
+      if (!mounted) return;
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final currentUser = userProvider.user;
+
+      if (currentUser == null || _couple == null) {
+        throw Exception('用户信息或情侣信息不完整');
+      }
+
+      // 获取规则和商品数据
+      final rulesResponse = await RulesApiService.getRules();
+      final rulesData = rulesResponse['rules'] as List<dynamic>? ?? [];
+      final rules = rulesData.map((rule) => Rule.fromJson(rule)).toList();
+
+      // 获取当前用户的商品
+      final currentUserShopsResponse = await ShopApiService.getItems(ownerId: currentUser.id);
+      final currentUserShopsData = currentUserShopsResponse['items'] as List<dynamic>? ?? [];
+      final currentUserShops = currentUserShopsData.map((item) => ShopItem.fromJson(item)).toList();
+
+      // 获取伴侣的商品
+      final partnerShopsResponse = await ShopApiService.getItems(ownerId: _couple!.partner.id);
+      final partnerShopsData = partnerShopsResponse['items'] as List<dynamic>? ?? [];
+      final partnerShops = partnerShopsData.map((item) => ShopItem.fromJson(item)).toList();
+
+      // 创建导出页面组件
+      final exportWidget = ExportPageWidget(
+        rules: rules,
+        currentUserShops: currentUserShops,
+        partnerShops: partnerShops,
+        currentUser: currentUser,
+        couple: _couple,
+      );
+
+      // 截图
+      final Uint8List imageBytes = await _screenshotController.captureFromWidget(
+        exportWidget,
+        pixelRatio: 2.0, // 高分辨率
+      );
+
+      if (imageBytes.isNotEmpty) {
+        // 下载图片
+        _downloadImage(imageBytes);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('图片已生成并下载！'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } else {
+        throw Exception('图片生成失败');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: ${e.toString()}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  // 保存图片到相册
+  Future<void> _downloadImage(Uint8List imageBytes) async {
+    try {
+      final String fileName = '小小卖部_${DateTime.now().millisecondsSinceEpoch}.png';
+
+      await SaverGallery.saveImage(
+        imageBytes,
+        quality: 100,
+        fileName: fileName,
+        androidRelativePath: 'Pictures/小小卖部',
+        skipIfExists: false,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('图片已保存到相册！'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存图片失败: ${e.toString()}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 }

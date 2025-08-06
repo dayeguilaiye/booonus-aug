@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import '../../../core/models/rule.dart';
 import '../../../core/models/couple.dart';
 import '../../../core/services/rules_api_service.dart';
@@ -755,97 +756,386 @@ class _RulesScreenState extends State<RulesScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.gentleShadow,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: Slidable(
+        key: ValueKey(rule.id),
+        endActionPane: ActionPane(
+          motion: const ScrollMotion(),
           children: [
-            // 主要内容：左右两列布局
-            Row(
+            SlidableAction(
+              onPressed: (context) => _editRule(rule),
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+              icon: Icons.edit,
+              label: '修改',
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                bottomLeft: Radius.circular(20),
+              ),
+            ),
+            SlidableAction(
+              onPressed: (context) => _deleteRule(rule),
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.onPrimary,
+              icon: Icons.delete,
+              label: '删除',
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+            ),
+          ],
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.gentleShadow,
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 左列：约定名称、描述、标签
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 第一行：约定名称
-                      Text(
-                        rule.name,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // 第二行：约定描述
-                      if (rule.description.isNotEmpty)
-                        Text(
-                          rule.description,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      // 第三行：适用对象标签
-                      _buildTargetTypeTags(rule),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // 右列：积分和执行按钮
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                // 主要内容：左右两列布局
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 第一行：积分显示
-                    Text(
-                      pointsText,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: pointsColor,
+                    // 左列：约定名称、描述、标签
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 第一行：约定名称
+                          Text(
+                            rule.name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // 第二行：约定描述
+                          if (rule.description.isNotEmpty)
+                            Text(
+                              rule.description,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          // 第三行：适用对象标签
+                          _buildTargetTypeTags(rule),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    // 第二行：执行按钮
-                    ElevatedButton(
-                      onPressed: () => _executeRule(rule),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.onPrimary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
+                    const SizedBox(width: 16),
+                    // 右列：积分和执行按钮
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // 第一行：积分显示
+                        Text(
+                          pointsText,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: pointsColor,
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      ),
-                      child: const Text(
-                        '执行',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 12),
+                        // 第二行：执行按钮
+                        ElevatedButton(
+                          onPressed: () => _executeRule(rule),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.onPrimary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          ),
+                          child: const Text(
+                            '执行',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 编辑规则
+  Future<void> _editRule(Rule rule) async {
+    final nameController = TextEditingController(text: rule.name);
+    final descriptionController = TextEditingController(text: rule.description);
+    final pointsController = TextEditingController(text: rule.points.toString());
+    String targetType = rule.targetType;
+
+    // 获取当前用户信息
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.user;
+    final currentUserName = currentUser?.username ?? '我';
+    final partnerName = _couple?.partner.username ?? '对方';
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('修改约定'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.85,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: '约定名称',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.rule),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descriptionController,
+                  decoration: InputDecoration(
+                    labelText: '约定描述',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.description),
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: pointsController,
+                  decoration: InputDecoration(
+                    labelText: '积分变化（正数为奖励，负数为惩罚）',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.diamond),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '适用对象:',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // 紧凑的单选按钮布局
+                Column(
+                  children: [
+                    RadioListTile<String>(
+                      title: Text(currentUserName),
+                      value: 'current_user',
+                      groupValue: targetType,
+                      activeColor: AppColors.primary,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          targetType = value!;
+                        });
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: Text(partnerName),
+                      value: 'partner',
+                      groupValue: targetType,
+                      activeColor: AppColors.primary,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          targetType = value!;
+                        });
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('双方'),
+                      value: 'both',
+                      groupValue: targetType,
+                      activeColor: AppColors.primary,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          targetType = value!;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                '取消',
+                style: TextStyle(color: AppColors.onSurfaceVariant),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.onPrimary,
+              ),
+              child: const Text('保存'),
+            ),
           ],
         ),
       ),
     );
+
+    if (result == true) {
+      final name = nameController.text.trim();
+      final description = descriptionController.text.trim();
+      final pointsText = pointsController.text.trim();
+
+      if (name.isEmpty || pointsText.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('请填写约定名称和积分'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      final points = int.tryParse(pointsText);
+      if (points == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('积分必须是数字'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      try {
+        await RulesApiService.updateRule(
+          rule.id,
+          name: name,
+          description: description,
+          points: points,
+          targetType: targetType,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('约定修改成功！'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          _loadRules();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('修改约定失败: ${_getErrorMessage(e)}'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+
+    nameController.dispose();
+    descriptionController.dispose();
+    pointsController.dispose();
+  }
+
+  // 删除规则
+  Future<void> _deleteRule(Rule rule) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除约定'),
+        content: Text('确定要删除约定 "${rule.name}" 吗？\n此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              '取消',
+              style: TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.onPrimary,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await RulesApiService.deleteRule(rule.id);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('约定删除成功！'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          _loadRules();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('删除约定失败: ${_getErrorMessage(e)}'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
   }
 }

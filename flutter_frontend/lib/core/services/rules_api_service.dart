@@ -41,9 +41,19 @@ class RulesApiService {
   }
 
   // 更新规则
-  static Future<Map<String, dynamic>> updateRule(int ruleId, Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> updateRule(int ruleId, {
+    required String name,
+    required String description,
+    required int points,
+    required String targetType,
+  }) async {
     try {
-      final response = await apiService.put('/rules/$ruleId', data: data);
+      final response = await apiService.put('/rules/$ruleId', data: {
+        'name': name,
+        'description': description,
+        'points': points,
+        'target_type': targetType,
+      });
       return response.data;
     } on DioException catch (e) {
       print('Update Rule API Error: ${e.response?.data}');
