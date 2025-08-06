@@ -30,10 +30,22 @@ func GetRules(c *gin.Context) {
 		return
 	}
 
+	// 获取情侣关系信息以确定用户位置
+	var user1ID, user2ID int
+	err = database.DB.QueryRow("SELECT user1_id, user2_id FROM couples WHERE id = ?", coupleID.Int64).Scan(&user1ID, &user2ID)
+	if err != nil {
+		logger.Error("Failed to get couple users: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	// 确定当前用户是user1还是user2
+	isCurrentUserUser1 := (userID == user1ID)
+
 	// 获取规则列表
 	query := `
 		SELECT id, couple_id, name, description, points, target_type, is_active, created_at, updated_at
-		FROM rules 
+		FROM rules
 		WHERE couple_id = ? AND is_active = TRUE
 		ORDER BY created_at DESC
 	`
@@ -46,7 +58,7 @@ func GetRules(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var rules []models.Rule
+	var rules []gin.H
 	for rows.Next() {
 		var rule models.Rule
 
@@ -59,7 +71,38 @@ func GetRules(c *gin.Context) {
 			continue
 		}
 
-		rules = append(rules, rule)
+		// 转换target_type为前端友好的格式
+		var targetTypeForFrontend string
+		switch rule.TargetType {
+		case "user1":
+			if isCurrentUserUser1 {
+				targetTypeForFrontend = "current_user"
+			} else {
+				targetTypeForFrontend = "partner"
+			}
+		case "user2":
+			if isCurrentUserUser1 {
+				targetTypeForFrontend = "partner"
+			} else {
+				targetTypeForFrontend = "current_user"
+			}
+		case "both":
+			targetTypeForFrontend = "both"
+		default:
+			targetTypeForFrontend = rule.TargetType
+		}
+
+		rules = append(rules, gin.H{
+			"id":          rule.ID,
+			"couple_id":   rule.CoupleID,
+			"name":        rule.Name,
+			"description": rule.Description,
+			"points":      rule.Points,
+			"target_type": targetTypeForFrontend,
+			"is_active":   rule.IsActive,
+			"created_at":  rule.CreatedAt,
+			"updated_at":  rule.UpdatedAt,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -75,7 +118,7 @@ func CreateRule(c *gin.Context) {
 		Name        string `json:"name" binding:"required"`
 		Description string `json:"description"`
 		Points      int    `json:"points" binding:"required"`
-		TargetType  string `json:"target_type" binding:"required,oneof=user1 user2 both"`
+		TargetType  string `json:"target_type" binding:"required,oneof=current_user partner both"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -97,10 +140,40 @@ func CreateRule(c *gin.Context) {
 		return
 	}
 
+	// 获取情侣关系信息以确定用户位置
+	var user1ID, user2ID int
+	err = database.DB.QueryRow("SELECT user1_id, user2_id FROM couples WHERE id = ?", coupleID.Int64).Scan(&user1ID, &user2ID)
+	if err != nil {
+		logger.Error("Failed to get couple users: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	// 转换前端的target_type为数据库格式
+	var dbTargetType string
+	switch req.TargetType {
+	case "current_user":
+		if userID == user1ID {
+			dbTargetType = "user1"
+		} else {
+			dbTargetType = "user2"
+		}
+	case "partner":
+		if userID == user1ID {
+			dbTargetType = "user2"
+		} else {
+			dbTargetType = "user1"
+		}
+	case "both":
+		dbTargetType = "both"
+	default:
+		dbTargetType = req.TargetType
+	}
+
 	// 创建规则
 	result, err := database.DB.Exec(
 		"INSERT INTO rules (couple_id, name, description, points, target_type) VALUES (?, ?, ?, ?, ?)",
-		coupleID.Int64, req.Name, req.Description, req.Points, req.TargetType,
+		coupleID.Int64, req.Name, req.Description, req.Points, dbTargetType,
 	)
 	if err != nil {
 		logger.Error("Failed to create rule: " + err.Error())

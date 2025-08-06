@@ -7,6 +7,7 @@ import '../../../core/services/couple_api_service.dart';
 import '../../../core/services/shop_api_service.dart';
 import '../../../core/models/couple.dart';
 import '../../../core/services/events_api_service.dart';
+import '../../../core/utils/event_bus.dart';
 import '../../widgets/points_cards_widget.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -30,6 +31,23 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+
+    // 监听情侣关系更新事件
+    eventBus.on(Events.coupleUpdated, _onCoupleUpdated);
+  }
+
+  @override
+  void dispose() {
+    // 移除事件监听
+    eventBus.off(Events.coupleUpdated, _onCoupleUpdated);
+    super.dispose();
+  }
+
+  // 处理情侣关系更新事件
+  void _onCoupleUpdated() {
+    if (mounted) {
+      _loadData(); // 重新加载所有数据
+    }
   }
 
   Future<void> _loadData() async {

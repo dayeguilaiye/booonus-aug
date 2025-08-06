@@ -69,12 +69,17 @@ class Rule {
 
   String getTargetTypeText() {
     switch (targetType) {
+      case 'current_user':
+        return '我';
+      case 'partner':
+        return '对方';
+      case 'both':
+        return '双方';
+      // 兼容旧格式
       case 'user1':
         return '用户1';
       case 'user2':
         return '用户2';
-      case 'both':
-        return '双方';
       default:
         return targetType;
     }

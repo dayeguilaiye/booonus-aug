@@ -6,6 +6,7 @@ import '../../../core/models/user.dart';
 import '../../../core/services/events_api_service.dart';
 import '../../../core/services/couple_api_service.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/utils/event_bus.dart';
 import '../../../core/utils/snackbar_utils.dart';
 
 import '../../widgets/empty_state_widget.dart';
@@ -34,7 +35,24 @@ class _EventsScreenState extends State<EventsScreen> {
       print('EventsScreen - PostFrameCallback 执行，准备调用 _loadData');
       _loadData();
     });
+
+    // 监听情侣关系更新事件
+    eventBus.on(Events.coupleUpdated, _onCoupleUpdated);
     print('EventsScreen - initState 结束');
+  }
+
+  @override
+  void dispose() {
+    // 移除事件监听
+    eventBus.off(Events.coupleUpdated, _onCoupleUpdated);
+    super.dispose();
+  }
+
+  // 处理情侣关系更新事件
+  void _onCoupleUpdated() {
+    if (mounted) {
+      _loadData(); // 重新加载事件数据
+    }
   }
 
   Future<void> _loadData() async {
@@ -150,7 +168,12 @@ class _EventsScreenState extends State<EventsScreen> {
     if (error is DioException) {
       return error.response?.data?['error'] ?? error.message ?? '网络错误';
     }
-    return error.toString();
+    // 如果是Exception类型，提取其中的消息
+    final String errorStr = error.toString();
+    if (errorStr.startsWith('Exception: ')) {
+      return errorStr.substring('Exception: '.length);
+    }
+    return errorStr;
   }
 
   Future<void> _showCreateEventDialog() async {

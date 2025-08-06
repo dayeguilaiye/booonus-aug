@@ -7,6 +7,7 @@ import '../../../core/services/rules_api_service.dart';
 import '../../../core/services/couple_api_service.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/event_bus.dart';
 import '../../widgets/user_avatar.dart';
 import '../../widgets/points_cards_widget.dart';
 
@@ -30,6 +31,23 @@ class _RulesScreenState extends State<RulesScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadRules();
     });
+
+    // 监听情侣关系更新事件
+    eventBus.on(Events.coupleUpdated, _onCoupleUpdated);
+  }
+
+  @override
+  void dispose() {
+    // 移除事件监听
+    eventBus.off(Events.coupleUpdated, _onCoupleUpdated);
+    super.dispose();
+  }
+
+  // 处理情侣关系更新事件
+  void _onCoupleUpdated() {
+    if (mounted) {
+      _loadRules(); // 重新加载规则数据
+    }
   }
 
   Future<void> _loadRules() async {
@@ -60,12 +78,24 @@ class _RulesScreenState extends State<RulesScreen> {
       }
 
       // Load rules
-      final response = await RulesApiService.getRules();
-      final rulesData = response['rules'] as List<dynamic>? ?? [];
-      _rules = rulesData.map((rule) => Rule.fromJson(rule)).toList();
+      try {
+        final response = await RulesApiService.getRules();
+        final rulesData = response['rules'] as List<dynamic>? ?? [];
+        _rules = rulesData.map((rule) => Rule.fromJson(rule)).toList();
+      } catch (e) {
+        // 如果是没有情侣关系的错误，不设置错误状态，而是显示空状态
+        if (e.toString().contains('需要先添加情侣才能使用规则功能')) {
+          _rules = [];
+        } else {
+          setState(() {
+            _error = _getErrorMessage(e);
+          });
+          return;
+        }
+      }
     } catch (e) {
       setState(() {
-        _error = '加载数据失败：${e.toString()}';
+        _error = _getErrorMessage(e);
       });
     } finally {
       setState(() {
@@ -78,7 +108,29 @@ class _RulesScreenState extends State<RulesScreen> {
     if (error is DioException) {
       return error.response?.data?['error'] ?? error.message ?? '网络错误';
     }
-    return error.toString();
+    // 如果是Exception类型，提取其中的消息
+    String errorStr = error.toString();
+    if (errorStr.startsWith('Exception: ')) {
+      return errorStr.substring('Exception: '.length);
+    }
+    return errorStr;
+  }
+
+  // 显示没有情侣关系的提示对话框
+  void _showNoCoupleDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('需要邀请情侣'),
+        content: const Text('创建约定需要先邀请你的情侣建立关系。\n\n你可以在主页面点击"邀请伴侣"来邀请你的情侣。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showCreateRuleDialog() async {
@@ -86,6 +138,12 @@ class _RulesScreenState extends State<RulesScreen> {
     final descriptionController = TextEditingController();
     final pointsController = TextEditingController();
     String targetType = 'both';
+
+    // 获取当前用户信息
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.user;
+    final currentUserName = currentUser?.username ?? '我';
+    final partnerName = _couple?.partner.username ?? '对方';
 
     final result = await showDialog<bool>(
       context: context,
@@ -148,8 +206,8 @@ class _RulesScreenState extends State<RulesScreen> {
                 Column(
                   children: [
                     RadioListTile<String>(
-                      title: const Text('用户1'),
-                      value: 'user1',
+                      title: Text(currentUserName),
+                      value: 'current_user',
                       groupValue: targetType,
                       activeColor: AppColors.primary,
                       contentPadding: EdgeInsets.zero,
@@ -161,8 +219,8 @@ class _RulesScreenState extends State<RulesScreen> {
                       },
                     ),
                     RadioListTile<String>(
-                      title: const Text('用户2'),
-                      value: 'user2',
+                      title: Text(partnerName),
+                      value: 'partner',
                       groupValue: targetType,
                       activeColor: AppColors.primary,
                       contentPadding: EdgeInsets.zero,
@@ -307,12 +365,24 @@ class _RulesScreenState extends State<RulesScreen> {
       await RulesApiService.executeRule(rule.id);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('约定执行成功！'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        // 刷新用户数据以更新积分显示
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        await userProvider.loadUserProfile();
+
+        // 重新加载规则页面数据（包括情侣信息）
+        await _loadRules();
+
+        // 触发全局刷新事件，通知其他页面更新积分显示
+        eventBus.emit(Events.coupleUpdated);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('约定执行成功！'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -364,7 +434,7 @@ class _RulesScreenState extends State<RulesScreen> {
                   ),
                 ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showCreateRuleDialog,
+        onPressed: _couple != null ? _showCreateRuleDialog : _showNoCoupleDialog,
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         child: const Icon(Icons.add),
@@ -418,6 +488,54 @@ class _RulesScreenState extends State<RulesScreen> {
 
   // 构建空约定状态
   Widget _buildEmptyRulesState() {
+    // 如果没有情侣关系，显示需要邀请情侣的提示
+    if (_couple == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: const Icon(
+                Icons.person_add_outlined,
+                size: 40,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '需要邀请情侣',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.onBackground,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '邀请你的情侣后就可以一起创建约定了！',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 有情侣关系但没有约定
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(40),
@@ -461,6 +579,30 @@ class _RulesScreenState extends State<RulesScreen> {
         ],
       ),
     );
+  }
+
+  // 获取规则目标类型的显示文本
+  String _getTargetTypeDisplayText(Rule rule) {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.user;
+    final currentUserName = currentUser?.username ?? '我';
+    final partnerName = _couple?.partner.username ?? '对方';
+
+    switch (rule.targetType) {
+      case 'current_user':
+        return currentUserName;
+      case 'partner':
+        return partnerName;
+      case 'both':
+        return '双方';
+      // 兼容旧格式
+      case 'user1':
+        return currentUserName;
+      case 'user2':
+        return partnerName;
+      default:
+        return rule.targetType;
+    }
   }
 
   Widget _buildRuleCard(Rule rule) {
@@ -564,15 +706,15 @@ class _RulesScreenState extends State<RulesScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.person,
                       size: 16,
                       color: AppColors.accent,
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      rule.getTargetTypeText(),
-                      style: TextStyle(
+                      _getTargetTypeDisplayText(rule),
+                      style: const TextStyle(
                         color: AppColors.accent,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

@@ -2,7 +2,7 @@
 
 # 生成GitHub Actions专用的kubeconfig文件
 # 使用方法: ./generate-kubeconfig.sh <CLUSTER_SERVER>
-# 示例: ./generate-kubeconfig.sh https://43.136.135.35:6443
+# 示例: ./generate-kubeconfig.sh https://xxxx:6443
 
 set -e
 
@@ -11,7 +11,7 @@ if [ $# -ne 1 ]; then
     echo "❌ 错误: 缺少集群地址参数"
     echo ""
     echo "使用方法: $0 <CLUSTER_SERVER>"
-    echo "示例: $0 https://43.136.135.35:6443"
+    echo "示例: $0 https://xxxx:6443"
     echo ""
     echo "说明:"
     echo "  CLUSTER_SERVER - k3s集群的外网访问地址"
@@ -45,7 +45,8 @@ kubectl apply -f k8s/github-actions-rbac.yaml
 
 # 2. 等待Secret创建
 echo "⏳ 等待Secret创建..."
-kubectl wait --for=condition=Ready secret/${SECRET_NAME} -n ${NAMESPACE} --timeout=60s
+# secret 无需等待
+# kubectl wait --for=condition=Ready secret/${SECRET_NAME} -n ${NAMESPACE} --timeout=60s
 
 # 3. 获取必要信息
 echo "🔍 获取集群信息..."

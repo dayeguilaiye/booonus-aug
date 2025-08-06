@@ -4,11 +4,14 @@ import '../../core/theme/app_colors.dart';
 import '../../core/providers/user_provider.dart';
 import '../../core/models/couple.dart';
 import '../../core/utils/number_formatter.dart';
+import '../../core/services/couple_api_service.dart';
+import '../../core/utils/event_bus.dart';
 import 'user_avatar.dart';
 import 'points_card_text.dart';
+import 'invite_couple_dialog.dart';
 
 /// 统一的积分卡片组件 - 在多个页面中复用
-class PointsCardsWidget extends StatelessWidget {
+class PointsCardsWidget extends StatefulWidget {
   final Couple? couple;
   final EdgeInsets? padding;
   final double? spacing;
@@ -21,6 +24,80 @@ class PointsCardsWidget extends StatelessWidget {
   });
 
   @override
+  State<PointsCardsWidget> createState() => _PointsCardsWidgetState();
+}
+
+class _PointsCardsWidgetState extends State<PointsCardsWidget> {
+  // 显示邀请情侣对话框
+  Future<void> _showInviteCoupleDialog() async {
+    final username = await showDialog<String>(
+      context: context,
+      builder: (context) => const InviteCoupleDialog(),
+    );
+
+    if (username != null && username.isNotEmpty) {
+      try {
+        // 显示加载状态
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('正在发送邀请...'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+
+        // 调用邀请API
+        await CoupleApiService.invite(username);
+
+        if (mounted) {
+          // 隐藏加载提示
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+          // 显示成功消息
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('邀请成功！情侣关系已建立'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+
+          // 刷新用户数据
+          final userProvider = Provider.of<UserProvider>(context, listen: false);
+          await userProvider.loadUserProfile();
+
+          // 触发全局刷新 - 通知所有依赖伴侣状态的页面更新
+          _triggerGlobalRefresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          // 隐藏加载提示
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+          // 显示错误消息
+          String errorMessage = e.toString();
+          if (errorMessage.startsWith('Exception: ')) {
+            errorMessage = errorMessage.substring('Exception: '.length);
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('邀请失败: $errorMessage'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // 触发全局刷新
+  void _triggerGlobalRefresh() {
+    // 发送情侣关系更新事件，通知所有监听的页面刷新
+    eventBus.emit(Events.coupleUpdated);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
@@ -28,7 +105,7 @@ class PointsCardsWidget extends StatelessWidget {
         if (user == null) return const SizedBox.shrink();
 
         return Padding(
-          padding: padding ?? EdgeInsets.zero,
+          padding: widget.padding ?? EdgeInsets.zero,
           child: Row(
             children: [
               // 当前用户的积分卡片
@@ -42,19 +119,22 @@ class PointsCardsWidget extends StatelessWidget {
                   isCurrentUser: true,
                 ),
               ),
-              SizedBox(width: spacing!),
+              SizedBox(width: widget.spacing!),
               // 伴侣的积分卡片或空卡片
               Expanded(
-                child: couple != null
+                child: widget.couple != null
                     ? PointsCard(
-                        name: couple!.partner.username,
-                        points: couple!.partner.points,
-                        avatar: couple!.partner.avatar,
+                        name: widget.couple!.partner.username,
+                        points: widget.couple!.partner.points,
+                        avatar: widget.couple!.partner.avatar,
                         backgroundColor: AppColors.accentContainer,
                         borderColor: AppColors.accent,
                         isCurrentUser: false,
                       )
-                    : const EmptyPointsCard(),
+                    : EmptyPointsCard(
+                        text: '邀请伴侣',
+                        onTap: _showInviteCoupleDialog,
+                      ),
               ),
             ],
           ),
