@@ -109,7 +109,7 @@ jobs:
           kubectl rollout restart deployment/booonus-deployment -n default
 
           # 等待rollout完成
-          kubectl rollout status deployment/booonus-deployment -n default --timeout=300s
+          kubectl rollout status deployment/booonus-deployment -n default --timeout=400s
 
           echo "✅ Deployment重启完成"
         fi

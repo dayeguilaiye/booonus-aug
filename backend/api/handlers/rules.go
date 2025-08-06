@@ -205,7 +205,7 @@ func UpdateRule(c *gin.Context) {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		Points      int    `json:"points"`
-		TargetType  string `json:"target_type" binding:"omitempty,oneof=user1 user2 both"`
+		TargetType  string `json:"target_type" binding:"omitempty,oneof=current_user partner both"`
 		IsActive    *bool  `json:"is_active"`
 	}
 
@@ -218,6 +218,52 @@ func UpdateRule(c *gin.Context) {
 	if !canUserAccessRule(userID, ruleID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 		return
+	}
+
+	// 如果需要更新target_type，需要转换为数据库格式
+	var dbTargetType string
+	if req.TargetType != "" {
+		// 获取用户的情侣关系信息以进行转换
+		var coupleID sql.NullInt64
+		var user1ID, user2ID int
+		err := database.DB.QueryRow("SELECT couple_id FROM users WHERE id = ?", userID).Scan(&coupleID)
+		if err != nil {
+			logger.Error("Failed to get user couple info: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+
+		if !coupleID.Valid {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No couple relationship found"})
+			return
+		}
+
+		err = database.DB.QueryRow("SELECT user1_id, user2_id FROM couples WHERE id = ?", coupleID.Int64).Scan(&user1ID, &user2ID)
+		if err != nil {
+			logger.Error("Failed to get couple info: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+
+		// 转换前端的target_type为数据库格式
+		switch req.TargetType {
+		case "current_user":
+			if userID == user1ID {
+				dbTargetType = "user1"
+			} else {
+				dbTargetType = "user2"
+			}
+		case "partner":
+			if userID == user1ID {
+				dbTargetType = "user2"
+			} else {
+				dbTargetType = "user1"
+			}
+		case "both":
+			dbTargetType = "both"
+		default:
+			dbTargetType = req.TargetType
+		}
 	}
 
 	// 构建更新查询
@@ -238,7 +284,7 @@ func UpdateRule(c *gin.Context) {
 	}
 	if req.TargetType != "" {
 		updates = append(updates, "target_type = ?")
-		args = append(args, req.TargetType)
+		args = append(args, dbTargetType)
 	}
 	if req.IsActive != nil {
 		updates = append(updates, "is_active = ?")
