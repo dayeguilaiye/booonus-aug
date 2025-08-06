@@ -69,9 +69,14 @@ class RulesApiService {
   }
 
   // 执行规则
-  static Future<Map<String, dynamic>> executeRule(int ruleId) async {
+  static Future<Map<String, dynamic>> executeRule(int ruleId, {int? targetUserId}) async {
     try {
-      final response = await apiService.post('/rules/$ruleId/execute');
+      final Map<String, dynamic> data = {};
+      if (targetUserId != null) {
+        data['target_user_id'] = targetUserId;
+      }
+
+      final response = await apiService.post('/rules/$ruleId/execute', data: data);
       return response.data;
     } on DioException catch (e) {
       print('Execute Rule API Error: ${e.response?.data}');

@@ -306,6 +306,12 @@ func ExecuteRule(c *gin.Context) {
 		return
 	}
 
+	// 获取请求体中的目标用户ID（可选，用于"both"类型的规则）
+	var req struct {
+		TargetUserID *int `json:"target_user_id"`
+	}
+	c.ShouldBindJSON(&req)
+
 	// 获取规则信息
 	var rule models.Rule
 	err = database.DB.QueryRow(
@@ -351,7 +357,19 @@ func ExecuteRule(c *gin.Context) {
 	case "user2":
 		targetUsers = []int{user2ID}
 	case "both":
-		targetUsers = []int{user1ID, user2ID}
+		// 对于"both"类型的规则，需要指定具体的目标用户
+		if req.TargetUserID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Target user ID is required for 'both' type rules"})
+			return
+		}
+
+		// 验证目标用户ID是否有效（必须是情侣中的一方）
+		if *req.TargetUserID != user1ID && *req.TargetUserID != user2ID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid target user ID"})
+			return
+		}
+
+		targetUsers = []int{*req.TargetUserID}
 	}
 
 	// 开始事务

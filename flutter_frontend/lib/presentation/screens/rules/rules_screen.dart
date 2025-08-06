@@ -334,35 +334,20 @@ class _RulesScreenState extends State<RulesScreen> {
 
   Future<void> _executeRule(Rule rule) async {
     final pointsText = rule.points > 0 ? '+${rule.points}' : '${rule.points}';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('执行约定'),
-        content: Text('确定要执行约定 "${rule.name}" 吗？\n积分变化：$pointsText'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(
-              '取消',
-              style: TextStyle(color: AppColors.onSurfaceVariant),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
-            ),
-            child: const Text('执行'),
-          ),
-        ],
-      ),
-    );
 
-    if (confirmed != true) return;
+    // 对于"both"类型的规则，需要选择目标用户
+    int? targetUserId;
+    if (rule.targetType == 'both') {
+      targetUserId = await _showTargetUserSelectionDialog(rule, pointsText);
+      if (targetUserId == null) return; // 用户取消了选择
+    } else {
+      // 对于单个用户的规则，显示确认对话框
+      final confirmed = await _showExecuteConfirmationDialog(rule, pointsText);
+      if (confirmed != true) return;
+    }
 
     try {
-      await RulesApiService.executeRule(rule.id);
+      await RulesApiService.executeRule(rule.id, targetUserId: targetUserId);
 
       if (mounted) {
         // 刷新用户数据以更新积分显示
@@ -394,6 +379,85 @@ class _RulesScreenState extends State<RulesScreen> {
         );
       }
     }
+  }
+
+  // 显示执行确认对话框（单个用户规则）
+  Future<bool?> _showExecuteConfirmationDialog(Rule rule, String pointsText) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('执行约定'),
+        content: Text('确定要执行约定 "${rule.name}" 吗？\n积分变化：$pointsText'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              '取消',
+              style: TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+            ),
+            child: const Text('执行'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 显示目标用户选择对话框（双方规则）
+  Future<int?> _showTargetUserSelectionDialog(Rule rule, String pointsText) async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.user;
+    final currentUserName = currentUser?.username ?? '我';
+    final partnerName = _couple?.partner.username ?? '对方';
+
+    return showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('执行约定'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('约定："${rule.name}"'),
+            Text('积分变化：$pointsText'),
+            const SizedBox(height: 16),
+            const Text('请选择执行对象：', style: TextStyle(fontWeight: FontWeight.w500)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: Text(
+              '取消',
+              style: TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(currentUser?.id),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+            ),
+            child: Text(currentUserName),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(_couple?.partner.id),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: AppColors.onPrimary,
+            ),
+            child: Text(partnerName),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -581,27 +645,107 @@ class _RulesScreenState extends State<RulesScreen> {
     );
   }
 
-  // 获取规则目标类型的显示文本
-  String _getTargetTypeDisplayText(Rule rule) {
+  // 构建适用对象标签
+  Widget _buildTargetTypeTags(Rule rule) {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.user;
     final currentUserName = currentUser?.username ?? '我';
     final partnerName = _couple?.partner.username ?? '对方';
 
-    switch (rule.targetType) {
-      case 'current_user':
-        return currentUserName;
-      case 'partner':
-        return partnerName;
-      case 'both':
-        return '双方';
-      // 兼容旧格式
-      case 'user1':
-        return currentUserName;
-      case 'user2':
-        return partnerName;
-      default:
-        return rule.targetType;
+    if (rule.targetType == 'both') {
+      // 双方：显示两个标签
+      return Row(
+        children: [
+          // 当前用户标签
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.person,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  currentUserName,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 伴侣标签
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.person_outline,
+                  size: 16,
+                  color: AppColors.accent,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  partnerName,
+                  style: const TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else {
+      // 单个用户：显示一个标签
+      final isCurrentUser = rule.targetType == 'current_user';
+      final displayName = isCurrentUser ? currentUserName : partnerName;
+      final color = isCurrentUser ? AppColors.primary : AppColors.accent;
+      final icon = isCurrentUser ? Icons.person : Icons.person_outline;
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              displayName,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -627,15 +771,16 @@ class _RulesScreenState extends State<RulesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 主要内容：两列布局
+            // 主要内容：左右两列布局
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 左列：约定名称和描述
+                // 左列：约定名称、描述、标签
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // 第一行：约定名称
                       Text(
                         rule.name,
                         style: const TextStyle(
@@ -645,6 +790,7 @@ class _RulesScreenState extends State<RulesScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
+                      // 第二行：约定描述
                       if (rule.description.isNotEmpty)
                         Text(
                           rule.description,
@@ -653,6 +799,9 @@ class _RulesScreenState extends State<RulesScreen> {
                             color: AppColors.onSurfaceVariant,
                           ),
                         ),
+                      const SizedBox(height: 12),
+                      // 第三行：适用对象标签
+                      _buildTargetTypeTags(rule),
                     ],
                   ),
                 ),
@@ -661,7 +810,7 @@ class _RulesScreenState extends State<RulesScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    // 积分显示
+                    // 第一行：积分显示
                     Text(
                       pointsText,
                       style: TextStyle(
@@ -671,7 +820,7 @@ class _RulesScreenState extends State<RulesScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // 执行按钮
+                    // 第二行：执行按钮
                     ElevatedButton(
                       onPressed: () => _executeRule(rule),
                       style: ElevatedButton.styleFrom(
@@ -694,36 +843,6 @@ class _RulesScreenState extends State<RulesScreen> {
                 ),
               ],
             ),
-            // 底部：适用对象标签
-            if (rule.targetType != 'both') ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.accentWithOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.person,
-                      size: 16,
-                      color: AppColors.accent,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _getTargetTypeDisplayText(rule),
-                      style: const TextStyle(
-                        color: AppColors.accent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ),
       ),

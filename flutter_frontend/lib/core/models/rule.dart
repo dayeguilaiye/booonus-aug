@@ -75,11 +75,6 @@ class Rule {
         return '对方';
       case 'both':
         return '双方';
-      // 兼容旧格式
-      case 'user1':
-        return '用户1';
-      case 'user2':
-        return '用户2';
       default:
         return targetType;
     }
