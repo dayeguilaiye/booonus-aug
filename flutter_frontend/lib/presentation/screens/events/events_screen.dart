@@ -8,6 +8,7 @@ import '../../../core/services/couple_api_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../core/utils/event_bus.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/error_message_utils.dart';
 
 import '../../widgets/empty_state_widget.dart';
 import '../../widgets/loading_widget.dart';
@@ -165,15 +166,7 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   String _getErrorMessage(dynamic error) {
-    if (error is DioException) {
-      return error.response?.data?['error'] ?? error.message ?? '网络错误';
-    }
-    // 如果是Exception类型，提取其中的消息
-    final String errorStr = error.toString();
-    if (errorStr.startsWith('Exception: ')) {
-      return errorStr.substring('Exception: '.length);
-    }
-    return errorStr;
+    return ErrorMessageUtils.getErrorMessage(error);
   }
 
   Future<void> _showCreateEventDialog() async {

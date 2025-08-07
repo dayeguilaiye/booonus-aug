@@ -8,6 +8,7 @@ import '../../../core/services/couple_api_service.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/undoable_snackbar_utils.dart';
+import '../../../core/utils/error_message_utils.dart';
 import '../../widgets/points_cards_widget.dart';
 
 class ShopScreen extends StatefulWidget {
@@ -76,10 +77,7 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   String _getErrorMessage(dynamic error) {
-    if (error is DioException) {
-      return error.response?.data?['error'] ?? error.message ?? '网络错误';
-    }
-    return error.toString();
+    return ErrorMessageUtils.getErrorMessage(error);
   }
 
   @override

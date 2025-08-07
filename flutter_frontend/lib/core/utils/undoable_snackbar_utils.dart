@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../services/points_api_service.dart';
 import '../models/points_history.dart';
+import 'error_message_utils.dart';
 
 class UndoableSnackbarUtils {
   /// 显示带撤销功能的成功提醒
@@ -175,10 +176,7 @@ class UndoableSnackbarUtils {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       // 显示撤销失败提示
-      String errorMessage = e.toString();
-      if (errorMessage.startsWith('Exception: ')) {
-        errorMessage = errorMessage.substring('Exception: '.length);
-      }
+      final errorMessage = ErrorMessageUtils.getUndoErrorMessage(e);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -286,13 +286,14 @@ func RevertOperation(c *gin.Context) {
 		return
 	}
 
-	// 添加撤销记录
-	revertDescription := "撤销操作: " + history.Description
-	err = addPointsHistory(tx, history.UserID, -history.Points, "revert", &historyID, revertDescription, false)
-	if err != nil {
-		logger.Error("Failed to add revert history: " + err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revert operation"})
-		return
+	// 如果是交易类型，需要同时撤销对方的记录
+	if history.Type == "transaction" && history.ReferenceID != nil {
+		err = revertRelatedTransactionRecord(tx, *history.ReferenceID, historyID)
+		if err != nil {
+			logger.Error("Failed to revert related transaction record: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revert operation"})
+			return
+		}
 	}
 
 	// 提交事务
@@ -304,6 +305,49 @@ func RevertOperation(c *gin.Context) {
 
 	logger.Info("Operation reverted: " + strconv.Itoa(historyID) + " by user " + strconv.Itoa(userID))
 	c.JSON(http.StatusOK, gin.H{"message": "Operation reverted successfully"})
+}
+
+// revertRelatedTransactionRecord 撤销相关的交易记录
+func revertRelatedTransactionRecord(tx *sql.Tx, transactionID, excludeHistoryID int) error {
+	// 查找同一个交易的其他积分历史记录
+	query := `
+		SELECT id, user_id, points
+		FROM points_history
+		WHERE type = 'transaction'
+		AND reference_id = ?
+		AND id != ?
+		AND is_reverted = FALSE
+	`
+
+	rows, err := tx.Query(query, transactionID, excludeHistoryID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var relatedID, relatedUserID, relatedPoints int
+		err := rows.Scan(&relatedID, &relatedUserID, &relatedPoints)
+		if err != nil {
+			return err
+		}
+
+		// 撤销相关用户的积分变化
+		err = updateUserPoints(tx, relatedUserID, -relatedPoints)
+		if err != nil {
+			return err
+		}
+
+		// 标记相关记录为已撤销
+		_, err = tx.Exec("UPDATE points_history SET is_reverted = TRUE WHERE id = ?", relatedID)
+		if err != nil {
+			return err
+		}
+
+		logger.Info("Related transaction record reverted: " + strconv.Itoa(relatedID))
+	}
+
+	return nil
 }
 
 // canUserRevertHistory 检查用户是否可以撤销某个历史记录

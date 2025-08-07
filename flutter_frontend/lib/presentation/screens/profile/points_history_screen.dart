@@ -5,6 +5,7 @@ import '../../../core/models/points_history.dart';
 import '../../../core/services/points_api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/providers/user_provider.dart';
+import '../../../core/utils/error_message_utils.dart';
 
 class PointsHistoryScreen extends StatefulWidget {
   final bool isMyHistory; // true表示我的积分记录，false表示对方的积分记录
@@ -635,10 +636,7 @@ class _PointsHistoryScreenState extends State<PointsHistoryScreen> {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
         // 显示撤销失败提示
-        String errorMessage = e.toString();
-        if (errorMessage.startsWith('Exception: ')) {
-          errorMessage = errorMessage.substring('Exception: '.length);
-        }
+        final errorMessage = ErrorMessageUtils.getUndoErrorMessage(e);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
