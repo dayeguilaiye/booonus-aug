@@ -390,6 +390,7 @@ func CancelRevertOperation(c *gin.Context) {
 
 	// 如果是交易类型，需要同时恢复对方的记录
 	if history.Type == "transaction" && history.ReferenceID != nil {
+		logger.Info("Cancelling revert for related transaction record: " + strconv.Itoa(*history.ReferenceID))
 		err = cancelRevertRelatedTransactionRecord(tx, *history.ReferenceID, historyID)
 		if err != nil {
 			logger.Error("Failed to cancel revert related transaction record: " + err.Error())
@@ -429,6 +430,7 @@ func revertRelatedTransactionRecord(tx *sql.Tx, transactionID, excludeHistoryID 
 
 	for rows.Next() {
 		var relatedID, relatedUserID, relatedPoints int
+		logger.Info("Reverting related transaction record, ID: " + strconv.Itoa(relatedID))
 		err := rows.Scan(&relatedID, &relatedUserID, &relatedPoints)
 		if err != nil {
 			return err
