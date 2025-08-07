@@ -61,6 +61,7 @@ func SetupRoutes() *gin.Engine {
 
 		// 撤销操作
 		protected.POST("/revert/:id", handlers.RevertOperation)
+		protected.POST("/cancel-revert/:id", handlers.CancelRevertOperation)
 	}
 
 	return router

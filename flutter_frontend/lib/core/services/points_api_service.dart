@@ -30,4 +30,10 @@ class PointsApiService {
     final response = await apiService.post('/revert/$historyId');
     return response.data;
   }
+
+  // 取消撤销操作
+  static Future<Map<String, dynamic>> cancelRevert(int historyId) async {
+    final response = await apiService.post('/cancel-revert/$historyId');
+    return response.data;
+  }
 }

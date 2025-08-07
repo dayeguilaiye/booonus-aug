@@ -307,6 +307,108 @@ func RevertOperation(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Operation reverted successfully"})
 }
 
+// CancelRevertOperation 取消撤销操作
+func CancelRevertOperation(c *gin.Context) {
+	// 获取历史记录ID
+	historyIDStr := c.Param("id")
+	historyID, err := strconv.Atoi(historyIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid history ID"})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	// 开始事务
+	tx, err := database.DB.Begin()
+	if err != nil {
+		logger.Error("Failed to begin transaction: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel revert operation"})
+		return
+	}
+	defer tx.Rollback()
+
+	// 获取历史记录
+	var history models.PointsHistory
+	query := `
+		SELECT id, user_id, points, type, reference_id, description, can_revert, is_reverted, created_at
+		FROM points_history
+		WHERE id = ?
+	`
+	err = tx.QueryRow(query, historyID).Scan(
+		&history.ID, &history.UserID, &history.Points, &history.Type,
+		&history.ReferenceID, &history.Description, &history.CanRevert,
+		&history.IsReverted, &history.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "History record not found"})
+		} else {
+			logger.Error("Failed to get history record: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel revert operation"})
+		}
+		return
+	}
+
+	// 检查权限
+	if !canUserRevertHistory(userID.(int), history.UserID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+		return
+	}
+
+	// 检查是否可以取消撤销
+	if !history.CanRevert {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "This operation cannot be reverted"})
+		return
+	}
+
+	if !history.IsReverted {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "This operation has not been reverted"})
+		return
+	}
+
+	// 恢复积分变化（重新应用原来的积分变化）
+	err = updateUserPoints(tx, history.UserID, history.Points)
+	if err != nil {
+		logger.Error("Failed to restore points: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel revert operation"})
+		return
+	}
+
+	// 标记为未撤销
+	_, err = tx.Exec("UPDATE points_history SET is_reverted = FALSE WHERE id = ?", historyID)
+	if err != nil {
+		logger.Error("Failed to mark as not reverted: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel revert operation"})
+		return
+	}
+
+	// 如果是交易类型，需要同时恢复对方的记录
+	if history.Type == "transaction" && history.ReferenceID != nil {
+		err = cancelRevertRelatedTransactionRecord(tx, *history.ReferenceID, historyID)
+		if err != nil {
+			logger.Error("Failed to cancel revert related transaction record: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel revert operation"})
+			return
+		}
+	}
+
+	// 提交事务
+	if err = tx.Commit(); err != nil {
+		logger.Error("Failed to commit transaction: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel revert operation"})
+		return
+	}
+
+	logger.Info("Operation revert cancelled successfully for history ID: " + strconv.Itoa(historyID))
+	c.JSON(http.StatusOK, gin.H{"message": "Operation revert cancelled successfully"})
+}
+
 // revertRelatedTransactionRecord 撤销相关的交易记录
 func revertRelatedTransactionRecord(tx *sql.Tx, transactionID, excludeHistoryID int) error {
 	// 查找同一个交易的其他积分历史记录
@@ -345,6 +447,49 @@ func revertRelatedTransactionRecord(tx *sql.Tx, transactionID, excludeHistoryID 
 		}
 
 		logger.Info("Related transaction record reverted: " + strconv.Itoa(relatedID))
+	}
+
+	return nil
+}
+
+// cancelRevertRelatedTransactionRecord 取消撤销相关的交易记录
+func cancelRevertRelatedTransactionRecord(tx *sql.Tx, transactionID, excludeHistoryID int) error {
+	// 查找同一个交易的其他积分历史记录
+	query := `
+		SELECT id, user_id, points
+		FROM points_history
+		WHERE type = 'transaction'
+		AND reference_id = ?
+		AND id != ?
+		AND is_reverted = TRUE
+	`
+
+	rows, err := tx.Query(query, transactionID, excludeHistoryID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var relatedID, relatedUserID, relatedPoints int
+		err := rows.Scan(&relatedID, &relatedUserID, &relatedPoints)
+		if err != nil {
+			return err
+		}
+
+		// 恢复相关用户的积分变化（重新应用原来的积分变化）
+		err = updateUserPoints(tx, relatedUserID, relatedPoints)
+		if err != nil {
+			return err
+		}
+
+		// 标记相关记录为未撤销
+		_, err = tx.Exec("UPDATE points_history SET is_reverted = FALSE WHERE id = ?", relatedID)
+		if err != nil {
+			return err
+		}
+
+		logger.Info("Related transaction record revert cancelled: " + strconv.Itoa(relatedID))
 	}
 
 	return nil
