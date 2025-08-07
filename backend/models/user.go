@@ -78,7 +78,7 @@ type PointsHistory struct {
 	UserID      int       `json:"user_id" db:"user_id"`
 	Points      int       `json:"points" db:"points"`             // 变化的积分数量
 	Type        string    `json:"type" db:"type"`                 // "transaction", "rule", "event"
-	ReferenceID *int      `json:"reference_id" db:"reference_id"` // 关联的记录ID
+	ReferenceID int       `json:"reference_id" db:"reference_id"` // 关联的记录ID
 	Description string    `json:"description" db:"description"`
 	CanRevert   bool      `json:"can_revert" db:"can_revert"`
 	IsReverted  bool      `json:"is_reverted" db:"is_reverted"`

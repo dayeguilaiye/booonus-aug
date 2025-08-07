@@ -92,7 +92,7 @@ func GetPointsHistory(c *gin.Context) {
 
 		if referenceID.Valid {
 			refID := int(referenceID.Int64)
-			h.ReferenceID = &refID
+			h.ReferenceID = refID
 		}
 
 		history = append(history, h)
@@ -172,7 +172,7 @@ func GetUserPointsHistory(c *gin.Context) {
 
 		if referenceID.Valid {
 			refID := int(referenceID.Int64)
-			h.ReferenceID = &refID
+			h.ReferenceID = refID
 		}
 
 		history = append(history, h)
@@ -227,12 +227,11 @@ func RevertOperation(c *gin.Context) {
 
 	// 获取历史记录
 	var history models.PointsHistory
-	var referenceID sql.NullInt64
 
 	err = database.DB.QueryRow(
 		"SELECT id, user_id, points, type, reference_id, description, can_revert, is_reverted FROM points_history WHERE id = ?",
 		historyID,
-	).Scan(&history.ID, &history.UserID, &history.Points, &history.Type, &referenceID, &history.Description, &history.CanRevert, &history.IsReverted)
+	).Scan(&history.ID, &history.UserID, &history.Points, &history.Type, &history.ReferenceID, &history.Description, &history.CanRevert, &history.IsReverted)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -285,10 +284,9 @@ func RevertOperation(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revert operation"})
 		return
 	}
-
 	// 如果是交易类型，需要同时撤销对方的记录
-	if history.Type == "transaction" && history.ReferenceID != nil {
-		err = revertRelatedTransactionRecord(tx, *history.ReferenceID, historyID)
+	if history.Type == "transaction" && history.ReferenceID != 0 {
+		err = revertRelatedTransactionRecord(tx, history.ReferenceID, historyID)
 		if err != nil {
 			logger.Error("Failed to revert related transaction record: " + err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revert operation"})
@@ -389,9 +387,8 @@ func CancelRevertOperation(c *gin.Context) {
 	}
 
 	// 如果是交易类型，需要同时恢复对方的记录
-	if history.Type == "transaction" && history.ReferenceID != nil {
-		logger.Info("Cancelling revert for related transaction record: " + strconv.Itoa(*history.ReferenceID))
-		err = cancelRevertRelatedTransactionRecord(tx, *history.ReferenceID, historyID)
+	if history.Type == "transaction" && history.ReferenceID != 0 {
+		err = cancelRevertRelatedTransactionRecord(tx, history.ReferenceID, historyID)
 		if err != nil {
 			logger.Error("Failed to cancel revert related transaction record: " + err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel revert operation"})
@@ -430,7 +427,6 @@ func revertRelatedTransactionRecord(tx *sql.Tx, transactionID, excludeHistoryID 
 
 	for rows.Next() {
 		var relatedID, relatedUserID, relatedPoints int
-		logger.Info("Reverting related transaction record, ID: " + strconv.Itoa(relatedID))
 		err := rows.Scan(&relatedID, &relatedUserID, &relatedPoints)
 		if err != nil {
 			return err
