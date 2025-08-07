@@ -9,7 +9,7 @@ import '../../../core/services/couple_api_service.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/event_bus.dart';
-import '../../widgets/user_avatar.dart';
+
 import '../../widgets/points_cards_widget.dart';
 
 class RulesScreen extends StatefulWidget {
@@ -21,9 +21,14 @@ class RulesScreen extends StatefulWidget {
 
 class _RulesScreenState extends State<RulesScreen> {
   List<Rule> _rules = [];
+  List<Rule> _filteredRules = [];
   bool _isLoading = true;
   Couple? _couple;
   String? _error;
+
+  // 排序和筛选状态
+  String _sortOrder = 'time_desc'; // time_asc, time_desc, points_asc, points_desc
+  String _filterType = 'all'; // all, current_user, partner, both
 
   @override
   void initState() {
@@ -101,8 +106,48 @@ class _RulesScreenState extends State<RulesScreen> {
     } finally {
       setState(() {
         _isLoading = false;
+        _applyFilterAndSort();
       });
     }
+  }
+
+  // 应用筛选和排序
+  void _applyFilterAndSort() {
+    List<Rule> filtered = List.from(_rules);
+
+    // 应用筛选
+    if (_filterType != 'all') {
+      filtered = filtered.where((rule) {
+        switch (_filterType) {
+          case 'current_user':
+            return rule.targetType == 'current_user';
+          case 'partner':
+            return rule.targetType == 'partner';
+          case 'both':
+            return rule.targetType == 'both';
+          default:
+            return true;
+        }
+      }).toList();
+    }
+
+    // 应用排序
+    filtered.sort((a, b) {
+      switch (_sortOrder) {
+        case 'time_asc':
+          return a.createdAt.compareTo(b.createdAt);
+        case 'time_desc':
+          return b.createdAt.compareTo(a.createdAt);
+        case 'points_asc':
+          return a.points.compareTo(b.points);
+        case 'points_desc':
+          return b.points.compareTo(a.points);
+        default:
+          return b.createdAt.compareTo(a.createdAt); // 默认时间倒序
+      }
+    });
+
+    _filteredRules = filtered;
   }
 
   String _getErrorMessage(dynamic error) {
@@ -254,7 +299,7 @@ class _RulesScreenState extends State<RulesScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
+              child: const Text(
                 '取消',
                 style: TextStyle(color: AppColors.onSurfaceVariant),
               ),
@@ -285,8 +330,8 @@ class _RulesScreenState extends State<RulesScreen> {
   Future<void> _createRule(String name, String description, String pointsStr, String targetType) async {
     if (name.isEmpty || pointsStr.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('请填写约定名称和积分'),
+        const SnackBar(
+          content: Text('请填写约定名称和积分'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -296,8 +341,8 @@ class _RulesScreenState extends State<RulesScreen> {
     final points = int.tryParse(pointsStr);
     if (points == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('请输入有效的积分值'),
+        const SnackBar(
+          content: Text('请输入有效的积分值'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -314,8 +359,8 @@ class _RulesScreenState extends State<RulesScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('约定创建成功！'),
+          const SnackBar(
+            content: Text('约定创建成功！'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -533,19 +578,184 @@ class _RulesScreenState extends State<RulesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '所有约定',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: AppColors.onBackground, // 深棕色
-          ),
+        // 标题和操作按钮行
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              '所有约定',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.onBackground,
+              ),
+            ),
+            Row(
+              children: [
+                // 排序按钮
+                PopupMenuButton<String>(
+                  icon: const Icon(
+                    Icons.sort,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
+                  tooltip: '排序',
+                  onSelected: (value) {
+                    setState(() {
+                      _sortOrder = value;
+                      _applyFilterAndSort();
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'time_desc',
+                      child: Row(
+                        children: [
+                          Icon(
+                            _sortOrder == 'time_desc' ? Icons.check : null,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('时间倒序'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'time_asc',
+                      child: Row(
+                        children: [
+                          Icon(
+                            _sortOrder == 'time_asc' ? Icons.check : null,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('时间顺序'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'points_desc',
+                      child: Row(
+                        children: [
+                          Icon(
+                            _sortOrder == 'points_desc' ? Icons.check : null,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('分数倒序'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'points_asc',
+                      child: Row(
+                        children: [
+                          Icon(
+                            _sortOrder == 'points_asc' ? Icons.check : null,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('分数顺序'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+                // 筛选按钮
+                PopupMenuButton<String>(
+                  icon: const Icon(
+                    Icons.filter_list,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
+                  tooltip: '筛选',
+                  onSelected: (value) {
+                    setState(() {
+                      _filterType = value;
+                      _applyFilterAndSort();
+                    });
+                  },
+                  itemBuilder: (context) {
+                    // 获取当前用户信息
+                    final userProvider = Provider.of<UserProvider>(context, listen: false);
+                    final currentUser = userProvider.user;
+                    final currentUserName = currentUser?.username ?? '我';
+                    final partnerName = _couple?.partner.username ?? '对方';
+
+                    return [
+                      PopupMenuItem(
+                        value: 'all',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _filterType == 'all' ? Icons.check : null,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('全部'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'current_user',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _filterType == 'current_user' ? Icons.check : null,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(currentUserName),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'partner',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _filterType == 'partner' ? Icons.check : null,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(partnerName),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'both',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _filterType == 'both' ? Icons.check : null,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('共同'),
+                          ],
+                        ),
+                      ),
+                    ];
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         _rules.isEmpty
             ? _buildEmptyRulesState()
             : Column(
-                children: _rules.map((rule) => _buildRuleCard(rule)).toList(),
+                children: _filteredRules.map((rule) => _buildRuleCard(rule)).toList(),
               ),
       ],
     );
@@ -789,11 +999,11 @@ class _RulesScreenState extends State<RulesScreen> {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
                 color: AppColors.gentleShadow,
                 blurRadius: 10,
-                offset: const Offset(0, 4),
+                offset: Offset(0, 4),
               ),
             ],
           ),
@@ -943,7 +1153,7 @@ class _RulesScreenState extends State<RulesScreen> {
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   '适用对象:',
                   style: TextStyle(
                     fontSize: 16,
@@ -1003,7 +1213,7 @@ class _RulesScreenState extends State<RulesScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
+              child: const Text(
                 '取消',
                 style: TextStyle(color: AppColors.onSurfaceVariant),
               ),
@@ -1081,9 +1291,8 @@ class _RulesScreenState extends State<RulesScreen> {
       }
     }
 
-    nameController.dispose();
-    descriptionController.dispose();
-    pointsController.dispose();
+    // 不手动dispose controllers，让它们自然被垃圾回收
+    // 这样可以避免在StatefulBuilder重建时出现"disposed controller"错误
   }
 
   // 删除规则
@@ -1096,7 +1305,7 @@ class _RulesScreenState extends State<RulesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(
+            child: const Text(
               '取消',
               style: TextStyle(color: AppColors.onSurfaceVariant),
             ),
