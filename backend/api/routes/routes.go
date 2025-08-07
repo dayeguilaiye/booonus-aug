@@ -40,6 +40,7 @@ func SetupRoutes() *gin.Engine {
 		protected.GET("/points", handlers.GetPoints)
 		protected.GET("/points/history", handlers.GetPointsHistory)
 		protected.GET("/points/history/:user_id", handlers.GetUserPointsHistory)
+		protected.GET("/points/couple-recent", handlers.GetCoupleRecentHistory)
 
 		// 小卖部
 		protected.GET("/shop", handlers.GetShopItems)

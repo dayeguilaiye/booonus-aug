@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/user_provider.dart';
 import '../../core/models/couple.dart';
@@ -97,6 +98,19 @@ class _PointsCardsWidgetState extends State<PointsCardsWidget> {
     eventBus.emit(Events.coupleUpdated);
   }
 
+  // 导航到我的积分历史页面
+  void _navigateToMyPointsHistory() {
+    context.push('/points-history/my');
+  }
+
+  // 导航到对方的积分历史页面
+  void _navigateToPartnerPointsHistory() {
+    final targetUserId = widget.couple?.partner.id;
+    if (targetUserId != null) {
+      context.push('/points-history/partner?targetUserId=$targetUserId');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<UserProvider>(
@@ -117,6 +131,7 @@ class _PointsCardsWidgetState extends State<PointsCardsWidget> {
                   backgroundColor: AppColors.primaryContainer,
                   borderColor: AppColors.primary,
                   isCurrentUser: true,
+                  onTap: _navigateToMyPointsHistory,
                 ),
               ),
               SizedBox(width: widget.spacing!),
@@ -130,6 +145,7 @@ class _PointsCardsWidgetState extends State<PointsCardsWidget> {
                         backgroundColor: AppColors.accentContainer,
                         borderColor: AppColors.accent,
                         isCurrentUser: false,
+                        onTap: _navigateToPartnerPointsHistory,
                       )
                     : EmptyPointsCard(
                         text: '邀请伴侣',

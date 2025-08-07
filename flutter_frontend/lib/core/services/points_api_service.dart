@@ -36,4 +36,12 @@ class PointsApiService {
     final response = await apiService.post('/cancel-revert/$historyId');
     return response.data;
   }
+
+  // 获取情侣双方的近期积分变化记录
+  static Future<Map<String, dynamic>> getCoupleRecentHistory({int limit = 5}) async {
+    final response = await apiService.get('/points/couple-recent', queryParameters: {
+      'limit': limit,
+    });
+    return response.data;
+  }
 }

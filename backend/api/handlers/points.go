@@ -194,6 +194,89 @@ func GetUserPointsHistory(c *gin.Context) {
 	})
 }
 
+// GetCoupleRecentHistory 获取情侣双方的近期积分变化记录
+func GetCoupleRecentHistory(c *gin.Context) {
+	userID := c.GetInt("user_id")
+
+	// 获取情侣信息
+	var coupleID sql.NullInt64
+	var partnerID int
+
+	// 查询当前用户的情侣关系
+	query := `
+		SELECT c.id,
+		       CASE WHEN c.user1_id = ? THEN c.user2_id ELSE c.user1_id END as partner_id
+		FROM couples c
+		WHERE c.user1_id = ? OR c.user2_id = ?
+	`
+
+	err := database.DB.QueryRow(query, userID, userID, userID).Scan(&coupleID, &partnerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No couple relationship found"})
+			return
+		}
+		logger.Error("Failed to get couple info: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get couple info"})
+		return
+	}
+
+	// 获取查询参数，默认获取最近5条记录
+	limitStr := c.DefaultQuery("limit", "5")
+	limit, _ := strconv.Atoi(limitStr)
+
+	// 查询双方的积分历史，按时间倒序排列
+	historyQuery := `
+		SELECT ph.id, ph.user_id, ph.points, ph.type, ph.reference_id, ph.description,
+		       ph.can_revert, ph.is_reverted, ph.created_at, u.username
+		FROM points_history ph
+		JOIN users u ON ph.user_id = u.id
+		WHERE ph.user_id IN (?, ?)
+		ORDER BY ph.created_at DESC
+		LIMIT ?
+	`
+
+	rows, err := database.DB.Query(historyQuery, userID, partnerID, limit)
+	if err != nil {
+		logger.Error("Failed to get couple recent history: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get recent history"})
+		return
+	}
+	defer rows.Close()
+
+	type HistoryWithUser struct {
+		models.PointsHistory
+		Username string `json:"username"`
+	}
+
+	var history []HistoryWithUser
+	for rows.Next() {
+		var h HistoryWithUser
+		var referenceID sql.NullInt64
+
+		err := rows.Scan(
+			&h.ID, &h.UserID, &h.Points, &h.Type, &referenceID,
+			&h.Description, &h.CanRevert, &h.IsReverted, &h.CreatedAt, &h.Username,
+		)
+		if err != nil {
+			logger.Error("Failed to scan couple recent history: " + err.Error())
+			continue
+		}
+
+		if referenceID.Valid {
+			refID := int(referenceID.Int64)
+			h.ReferenceID = refID
+		}
+
+		history = append(history, h)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"history": history,
+		"limit":   limit,
+	})
+}
+
 // addPointsHistory 添加积分历史记录（内部函数）
 func addPointsHistory(tx *sql.Tx, userID, points int, historyType string, referenceID *int, description string, canRevert bool) error {
 	var refID interface{}

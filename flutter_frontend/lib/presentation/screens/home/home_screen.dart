@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/services/couple_api_service.dart';
 import '../../../core/services/shop_api_service.dart';
+import '../../../core/services/points_api_service.dart';
 import '../../../core/models/couple.dart';
+import '../../../core/models/points_history_with_user.dart';
 import '../../../core/services/events_api_service.dart';
 import '../../../core/utils/event_bus.dart';
 import '../../../core/utils/undoable_snackbar_utils.dart';
@@ -25,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _myItemCount = 0;
   int _partnerItemCount = 0;
+  List<PointsHistoryWithUser> _recentHistory = [];
 
   @override
   void initState() {
@@ -100,10 +103,23 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
+      // Load recent points history for couple
+      List<PointsHistoryWithUser> recentHistory = [];
+      if (couple != null) {
+        try {
+          final historyResponse = await PointsApiService.getCoupleRecentHistory(limit: 5);
+          final historyList = historyResponse['history'] as List<dynamic>? ?? [];
+          recentHistory = historyList.map((item) => PointsHistoryWithUser.fromJson(item)).toList();
+        } catch (e) {
+          print('Error loading recent history: $e');
+        }
+      }
+
       setState(() {
         _couple = couple;
         _myItemCount = myItemCount;
         _partnerItemCount = partnerItemCount;
+        _recentHistory = recentHistory;
       });
     } catch (e) {
       setState(() {
@@ -152,11 +168,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 32),
                         _buildShopsSection(),
                         const SizedBox(height: 32),
-                        _buildQuickActions(),
+                        _buildRecentHistory(),
                       ],
                     ),
                   ),
                 ),
+      floatingActionButton: _couple != null
+          ? FloatingActionButton(
+              onPressed: _showCreateEventDialog,
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 
@@ -379,83 +403,114 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 构建快捷操作
-  Widget _buildQuickActions() {
+  // 构建近期积分变化
+  Widget _buildRecentHistory() {
+    if (_couple == null) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '快捷操作',
+          '近期积分变化',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: AppColors.onBackground, // 深棕色
+            color: AppColors.onBackground,
           ),
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionButton(
-                '创建约定',
-                Icons.add,
-                AppColors.primaryContainer, // 非常浅的桃色
-                AppColors.primary, // 温暖桃粉色
-                () => context.go('/rules'),
+        _recentHistory.isEmpty
+            ? Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Center(
+                  child: Text(
+                    '暂无积分变化记录',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              )
+            : Column(
+                children: _recentHistory.map((history) => _buildHistoryItem(history)).toList(),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickActionButton(
-                '特殊事件',
-                Icons.card_giftcard,
-                AppColors.accentContainer, // 浅薄荷绿
-                AppColors.accent, // 薄荷绿
-                () => _showCreateEventDialog(),
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }
 
-  // 构建快捷操作按钮
-  Widget _buildQuickActionButton(String title, IconData icon, Color bgColor, Color iconColor, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: Icon(
-                icon,
-                color: iconColor,
-                size: 24,
-              ),
+  // 构建积分变化项
+  Widget _buildHistoryItem(PointsHistoryWithUser history) {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.user;
+
+    // 确定背景颜色（按主题）
+    Color bgColor;
+    if (currentUser != null && history.userId == currentUser.id) {
+      bgColor = AppColors.primaryContainer; // 当前用户使用主色调
+    } else {
+      bgColor = AppColors.accentContainer; // 伴侣使用辅助色调
+    }
+
+    // 确定积分颜色（按增减和撤销状态）
+    Color pointsColor;
+    if (history.isReverted) {
+      pointsColor = AppColors.onSurfaceVariant; // 灰色表示已撤销
+    } else if (history.points > 0) {
+      pointsColor = Colors.green; // 绿色表示增加
+    } else {
+      pointsColor = Colors.red; // 红色表示减少
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  history.username,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onBackground,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  history.description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.onBackground, // 深棕色
-              ),
+          ),
+          Text(
+            '${history.points > 0 ? '+' : ''}${history.points}',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: pointsColor,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
