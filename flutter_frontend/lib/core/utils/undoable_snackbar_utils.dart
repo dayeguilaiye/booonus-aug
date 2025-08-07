@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../services/points_api_service.dart';
@@ -5,17 +6,22 @@ import '../models/points_history.dart';
 import 'error_message_utils.dart';
 
 class UndoableSnackbarUtils {
+  // 用于存储定时器，确保在无障碍模式下也能自动消失
+  static Timer? _autoHideTimer;
+
   /// 显示带撤销功能的成功提醒
   ///
   /// [context] - BuildContext
   /// [message] - 成功消息
   /// [onRefresh] - 撤销成功后的刷新回调
   /// [targetUserId] - 目标用户ID，用于查询积分历史
+  /// [duration] - SnackBar 显示时长，默认5秒
   static Future<void> showUndoableSuccess(
     BuildContext context,
     String message, {
     VoidCallback? onRefresh,
     int? targetUserId,
+    Duration duration = const Duration(seconds: 5),
   }) async {
     // 检查 context 是否仍然有效
     if (!context.mounted) return;
@@ -34,39 +40,12 @@ class UndoableSnackbarUtils {
       }
 
       // 显示带撤销功能的 SnackBar
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: AppColors.onSuccess,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    color: AppColors.onSuccess,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 5),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          action: SnackBarAction(
-            label: '撤销',
-            textColor: AppColors.onSuccess,
-            onPressed: () => _handleUndo(context, latestHistory, onRefresh),
-          ),
-        ),
+      _showUndoableSnackBar(
+        context,
+        message,
+        latestHistory,
+        onRefresh,
+        duration,
       );
     } catch (e) {
       // 如果获取历史记录失败，显示普通的成功提醒
@@ -74,6 +53,67 @@ class UndoableSnackbarUtils {
         _showSimpleSuccess(context, message);
       }
     }
+  }
+
+  /// 显示带撤销功能的 SnackBar，支持在无障碍模式下自动消失
+  static void _showUndoableSnackBar(
+    BuildContext context,
+    String message,
+    PointsHistory latestHistory,
+    VoidCallback? onRefresh,
+    Duration duration,
+  ) {
+    // 取消之前的定时器
+    _autoHideTimer?.cancel();
+
+    // 显示 SnackBar
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    scaffoldMessenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(
+              Icons.check_circle,
+              color: AppColors.onSuccess,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: AppColors.onSuccess,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        // 设置一个很长的 duration，我们会用定时器手动控制
+        duration: const Duration(days: 1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        action: SnackBarAction(
+          label: '撤销',
+          textColor: AppColors.onSuccess,
+          onPressed: () {
+            // 取消自动隐藏定时器
+            _autoHideTimer?.cancel();
+            _handleUndo(context, latestHistory, onRefresh);
+          },
+        ),
+      ),
+    );
+
+    // 设置定时器，在指定时间后自动隐藏 SnackBar
+    _autoHideTimer = Timer(duration, () {
+      if (context.mounted) {
+        scaffoldMessenger.hideCurrentSnackBar();
+      }
+    });
   }
 
   /// 获取最新的可撤销积分历史记录

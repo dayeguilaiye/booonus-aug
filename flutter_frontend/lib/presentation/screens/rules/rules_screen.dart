@@ -403,11 +403,24 @@ class _RulesScreenState extends State<RulesScreen> {
         eventBus.emit(Events.coupleUpdated);
 
         if (mounted) {
+          // 确定用于撤销功能的用户ID
+          int? undoTargetUserId;
+          if (rule.targetType == 'both') {
+            // 对于both类型的规则，使用选择的targetUserId
+            undoTargetUserId = targetUserId;
+          } else if (rule.targetType == 'current_user') {
+            // 对于针对当前用户的规则，使用当前用户的ID
+            undoTargetUserId = userProvider.user?.id;
+          } else if (rule.targetType == 'partner') {
+            // 对于针对伴侣的规则，使用伴侣的ID
+            undoTargetUserId = _couple?.partner.id;
+          }
+
           // 显示带撤销功能的成功提醒
           await UndoableSnackbarUtils.showUndoableSuccess(
             context,
             '约定执行成功！',
-            targetUserId: targetUserId,
+            targetUserId: undoTargetUserId,
             onRefresh: () {
               // 刷新数据
               _loadRules();

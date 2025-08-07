@@ -393,6 +393,7 @@ class _ShopScreenState extends State<ShopScreen> {
         await UndoableSnackbarUtils.showUndoableSuccess(
           context,
           '购买成功！享受你的服务吧 💕',
+          targetUserId: userProvider.user?.id, // 传入当前用户的ID
           onRefresh: () {
             // 刷新数据
             _loadData();
