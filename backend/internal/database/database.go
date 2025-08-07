@@ -128,7 +128,7 @@ func createTables() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
 			points INTEGER NOT NULL,
-			type TEXT NOT NULL CHECK (type IN ('transaction', 'rule', 'event')),
+			type TEXT NOT NULL CHECK (type IN ('transaction', 'rule', 'event', 'revert')),
 			reference_id INTEGER,
 			description TEXT NOT NULL,
 			can_revert BOOLEAN DEFAULT FALSE,
@@ -187,6 +187,83 @@ func runMigrations() error {
 			}
 			logger.Info("Added avatar column to users table")
 		}
+	}
+
+	// 迁移 points_history 表以支持 'revert' 类型
+	if err := migratePointsHistoryTable(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// migratePointsHistoryTable 迁移 points_history 表以支持 'revert' 类型
+func migratePointsHistoryTable() error {
+	// 检查是否需要迁移（通过尝试插入一个 'revert' 类型的记录来测试）
+	_, err := DB.Exec("INSERT INTO points_history (user_id, points, type, description) VALUES (0, 0, 'revert', 'test')")
+	if err != nil {
+		// 如果插入失败，说明需要迁移
+		logger.Info("Migrating points_history table to support 'revert' type")
+
+		// 开始事务
+		tx, err := DB.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		// 创建新表
+		_, err = tx.Exec(`CREATE TABLE points_history_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			points INTEGER NOT NULL,
+			type TEXT NOT NULL CHECK (type IN ('transaction', 'rule', 'event', 'revert')),
+			reference_id INTEGER,
+			description TEXT NOT NULL,
+			can_revert BOOLEAN DEFAULT FALSE,
+			is_reverted BOOLEAN DEFAULT FALSE,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)`)
+		if err != nil {
+			logger.Error("Failed to create new points_history table: " + err.Error())
+			return err
+		}
+
+		// 复制数据
+		_, err = tx.Exec(`INSERT INTO points_history_new
+			(id, user_id, points, type, reference_id, description, can_revert, is_reverted, created_at)
+			SELECT id, user_id, points, type, reference_id, description, can_revert, is_reverted, created_at
+			FROM points_history`)
+		if err != nil {
+			logger.Error("Failed to copy data to new points_history table: " + err.Error())
+			return err
+		}
+
+		// 删除旧表
+		_, err = tx.Exec("DROP TABLE points_history")
+		if err != nil {
+			logger.Error("Failed to drop old points_history table: " + err.Error())
+			return err
+		}
+
+		// 重命名新表
+		_, err = tx.Exec("ALTER TABLE points_history_new RENAME TO points_history")
+		if err != nil {
+			logger.Error("Failed to rename new points_history table: " + err.Error())
+			return err
+		}
+
+		// 提交事务
+		if err = tx.Commit(); err != nil {
+			logger.Error("Failed to commit points_history migration: " + err.Error())
+			return err
+		}
+
+		logger.Info("Successfully migrated points_history table")
+	} else {
+		// 删除测试记录
+		DB.Exec("DELETE FROM points_history WHERE user_id = 0 AND points = 0 AND type = 'revert' AND description = 'test'")
 	}
 
 	return nil
