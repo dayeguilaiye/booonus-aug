@@ -7,6 +7,7 @@ import '../../../core/services/shop_api_service.dart';
 import '../../../core/services/couple_api_service.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/undoable_snackbar_utils.dart';
 import '../../widgets/points_cards_widget.dart';
 
 class ShopScreen extends StatefulWidget {
@@ -390,16 +391,25 @@ class _ShopScreenState extends State<ShopScreen> {
       await ShopApiService.buyItem(item.id);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('购买成功！享受你的服务吧 💕'),
-            backgroundColor: AppColors.success,
-          ),
+        // 显示带撤销功能的成功提醒
+        await UndoableSnackbarUtils.showUndoableSuccess(
+          context,
+          '购买成功！享受你的服务吧 💕',
+          onRefresh: () {
+            // 刷新数据
+            _loadData();
+            // 重新加载用户信息以更新积分显示
+            userProvider.loadUserProfile();
+          },
         );
+
         // 更新用户积分
         userProvider.updateUserPoints(currentPoints - item.price);
       }
-      _loadData();
+
+      if (mounted) {
+        _loadData();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

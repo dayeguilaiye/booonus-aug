@@ -8,6 +8,7 @@ import '../../../core/services/shop_api_service.dart';
 import '../../../core/models/couple.dart';
 import '../../../core/services/events_api_service.dart';
 import '../../../core/utils/event_bus.dart';
+import '../../../core/utils/undoable_snackbar_utils.dart';
 import '../../widgets/points_cards_widget.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -635,21 +636,33 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('事件创建成功！'),
-            backgroundColor: AppColors.success,
-          ),
+        // 获取用户提供者引用（在异步操作前）
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+        // 显示带撤销功能的成功提醒
+        await UndoableSnackbarUtils.showUndoableSuccess(
+          context,
+          '事件创建成功！',
+          targetUserId: targetId,
+          onRefresh: () {
+            // 刷新数据
+            _loadData();
+            // 如果目标是当前用户，重新加载用户信息以更新积分显示
+            if (targetId == userProvider.user?.id) {
+              userProvider.loadUserProfile();
+            }
+          },
         );
 
         // 如果目标是当前用户，更新积分显示
-        final userProvider = Provider.of<UserProvider>(context, listen: false);
-        if (targetId == userProvider.user?.id) {
+        if (mounted && targetId == userProvider.user?.id) {
           userProvider.updateUserPoints((userProvider.user?.points ?? 0) + points);
         }
 
         // 重新加载数据以更新显示
-        _loadData();
+        if (mounted) {
+          _loadData();
+        }
       }
     } catch (e) {
       if (mounted) {

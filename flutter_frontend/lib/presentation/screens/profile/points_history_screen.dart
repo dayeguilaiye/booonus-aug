@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/models/points_history.dart';
 import '../../../core/services/points_api_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/providers/user_provider.dart';
 
 class PointsHistoryScreen extends StatefulWidget {
   final bool isMyHistory; // true表示我的积分记录，false表示对方的积分记录
@@ -411,18 +413,258 @@ class _PointsHistoryScreenState extends State<PointsHistoryScreen> {
               ],
             ),
           ),
-          // 积分变化
-          Text(
-            pointsText,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: pointsColor,
-            ),
+          // 右侧：积分变化和撤销按钮
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // 积分变化数值
+              Text(
+                pointsText,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: pointsColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 撤销按钮（仅在可撤销且为自己的记录时显示）
+              if (widget.isMyHistory && history.canRevert && !history.isReverted)
+                SizedBox(
+                  height: 28,
+                  child: ElevatedButton(
+                    onPressed: () => _showUndoConfirmDialog(history),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error.withValues(alpha: 0.1),
+                      foregroundColor: AppColors.error,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: AppColors.error.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      '撤销',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  // 显示撤销确认对话框
+  Future<void> _showUndoConfirmDialog(PointsHistory history) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认撤销'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('确定要撤销这次操作吗？'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '操作详情：',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    history.description,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.onBackground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        '积分变化：',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        history.points > 0 ? '+${history.points}' : '${history.points}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: history.points > 0 ? AppColors.accent : AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '撤销后将恢复操作前的积分状态。',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.onError,
+            ),
+            child: const Text('确认撤销'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _handleUndo(history);
+    }
+  }
+
+  // 处理撤销操作
+  Future<void> _handleUndo(PointsHistory history) async {
+    if (!mounted) return;
+
+    try {
+      // 获取用户提供者引用（在异步操作前）
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+      // 显示加载提示
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 8),
+              Text('正在撤销...'),
+            ],
+          ),
+          backgroundColor: AppColors.primary,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // 调用撤销 API
+      await PointsApiService.revert(history.id);
+
+      if (mounted) {
+        // 隐藏加载提示
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        // 显示撤销成功提示
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  Icons.undo,
+                  color: AppColors.onSuccess,
+                  size: 20,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  '撤销成功',
+                  style: TextStyle(color: AppColors.onSuccess),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // 刷新积分历史数据
+        await _loadHistory();
+
+        // 更新用户积分显示
+        if (mounted) {
+          await userProvider.loadUserProfile();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        // 隐藏加载提示
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        // 显示撤销失败提示
+        String errorMessage = e.toString();
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.substring('Exception: '.length);
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.error,
+                  color: AppColors.onError,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '撤销失败: $errorMessage',
+                    style: const TextStyle(color: AppColors.onError),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   // 格式化日期时间

@@ -9,6 +9,7 @@ import '../../../core/services/couple_api_service.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/event_bus.dart';
+import '../../../core/utils/undoable_snackbar_utils.dart';
 
 import '../../widgets/points_cards_widget.dart';
 
@@ -396,8 +397,10 @@ class _RulesScreenState extends State<RulesScreen> {
       await RulesApiService.executeRule(rule.id, targetUserId: targetUserId);
 
       if (mounted) {
-        // 刷新用户数据以更新积分显示
+        // 获取用户提供者引用（在异步操作前）
         final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+        // 刷新用户数据以更新积分显示
         await userProvider.loadUserProfile();
 
         // 重新加载规则页面数据（包括情侣信息）
@@ -407,11 +410,19 @@ class _RulesScreenState extends State<RulesScreen> {
         eventBus.emit(Events.coupleUpdated);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('约定执行成功！'),
-              backgroundColor: AppColors.success,
-            ),
+          // 显示带撤销功能的成功提醒
+          await UndoableSnackbarUtils.showUndoableSuccess(
+            context,
+            '约定执行成功！',
+            targetUserId: targetUserId,
+            onRefresh: () {
+              // 刷新数据
+              _loadRules();
+              // 重新加载用户信息以更新积分显示
+              userProvider.loadUserProfile();
+              // 触发全局刷新事件
+              eventBus.emit(Events.coupleUpdated);
+            },
           );
         }
       }
