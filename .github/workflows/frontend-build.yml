@@ -1,0 +1,137 @@
+name: Build Frontend Docker Image
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'flutter_frontend/**'
+      - '.github/workflows/frontend-build.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'flutter_frontend/**'
+      - '.github/workflows/frontend-build.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/frontend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: ./flutter_frontend
+        file: ./flutter_frontend/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+    - name: Image digest
+      run: echo "Image digest:" ${{ steps.build.outputs.digest }}
+
+    - name: Summary
+      run: |
+        echo "## 🚀 Frontend Docker Image Built Successfully" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Digest:** ${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl config current-context
+
+    - name: Deploy to k3s
+      run: |
+        export KUBECONFIG=kubeconfig
+
+        # 获取最新的镜像标签
+        IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+
+        # 检查deployment是否存在
+        if kubectl get deployment booonus-frontend-deployment -n default >/dev/null 2>&1; then
+          echo "🔄 强制重启frontend deployment以拉取最新镜像..."
+
+          # 由于使用latest标签，直接重启deployment来强制拉取最新镜像
+          kubectl rollout restart deployment/booonus-frontend-deployment -n default
+
+          # 等待rollout完成
+          kubectl rollout status deployment/booonus-frontend-deployment -n default --timeout=400s
+
+          echo "✅ Frontend Deployment重启完成"
+        else
+          echo "⚠️ Frontend deployment不存在，跳过部署步骤"
+        fi
+
+        # 显示最新的pod信息和镜像
+        echo "🔍 最新Frontend Pod详细信息:"
+        kubectl get pods -l app=booonus-frontend -n default -o wide || echo "No frontend pods found"
+
+    - name: Deployment Summary
+      run: |
+        export KUBECONFIG=kubeconfig
+        echo "## 🚀 Frontend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "**Namespace:** default" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployment:** booonus-frontend-deployment" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Pod Status" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        kubectl get pods -l app=booonus-frontend -n default >> $GITHUB_STEP_SUMMARY || echo "No frontend pods found" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+    - name: Clean up
+      if: always()
+      run: rm -f kubeconfig

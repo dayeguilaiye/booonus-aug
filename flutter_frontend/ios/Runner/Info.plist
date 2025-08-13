@@ -49,5 +49,7 @@
 	<string>我们需要访问您的相册来保存图片。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>我们需要访问您的相册来保存图片。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>此应用需要访问本地网络以支持开发调试功能。</string>
 </dict>
 </plist>

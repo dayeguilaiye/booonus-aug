@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
+import 'platform_utils.dart';
 
 /// 响应式文本工具类，确保跨平台一致的文本显示
 class ResponsiveText {
@@ -50,14 +50,7 @@ class ResponsiveText {
 
   /// 获取平台特定的字体系列
   static String? getPlatformFontFamily() {
-    if (Platform.isIOS) {
-      // iOS 使用系统默认字体，不指定具体字体名称
-      // 这样可以避免字体加载问题
-      return null; // 让系统自动选择最佳字体
-    } else if (Platform.isAndroid) {
-      return 'Roboto'; // Android 系统字体
-    }
-    return null; // 其他平台使用默认字体
+    return PlatformUtils.platformFontFamily;
   }
 
   /// 创建响应式文本样式

@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
+import '../utils/platform_utils.dart';
 import 'app_colors.dart';
 
 class AppTheme {
   /// 获取平台特定的字体系列
   static String? get _platformFontFamily {
-    if (Platform.isIOS) {
-      // iOS 使用系统默认字体，避免字体加载问题
-      return null;
-    } else if (Platform.isAndroid) {
-      return 'Roboto';
-    }
-    return null;
+    return PlatformUtils.platformFontFamily;
   }
 
   static ThemeData get lightTheme {

@@ -3,10 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:screenshot/screenshot.dart';
 import 'dart:typed_data';
-import 'package:saver_gallery/saver_gallery.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'dart:io';
 
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/user_provider.dart';
@@ -17,6 +15,8 @@ import '../../../core/models/couple.dart';
 import '../../../core/models/rule.dart';
 import '../../../core/models/shop_item.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/platform_utils.dart';
+import '../../../core/utils/download_utils.dart';
 import '../../widgets/user_avatar.dart';
 import '../../widgets/export_page_widget.dart';
 import 'avatar_selection_screen.dart';
@@ -430,26 +430,161 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // 检查并请求权限
   Future<bool> _checkAndRequestPermissions() async {
-    if (!Platform.isAndroid && !Platform.isIOS) {
+    // Web平台下载不需要权限，直接返回true
+    if (PlatformUtils.isWeb) {
+      return true;
+    }
+
+    if (!PlatformUtils.isAndroid && !PlatformUtils.isIOS) {
       return false; // 只支持Android和iOS平台
     }
 
-    if (Platform.isAndroid) {
+    if (PlatformUtils.isAndroid) {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
       final sdkInt = deviceInfo.version.sdkInt;
 
       // Android SDK 29及以上版本不需要读权限来写入文件
       return sdkInt >= 29 ? true : await Permission.storage.request().isGranted;
-    } else if (Platform.isIOS) {
-      // iOS权限，用于保存图片到相册
-      return await Permission.photosAddOnly.request().isGranted;
+    } else if (PlatformUtils.isIOS) {
+      // iOS权限处理 - 尝试多种权限类型
+      try {
+        print('Debug: Starting iOS permission check...');
+
+        // 尝试不同的权限类型
+        List<Permission> permissionsToTry = [
+          Permission.photosAddOnly,  // iOS 14+ 添加照片权限
+          Permission.photos,         // 完整相册权限
+        ];
+
+        for (int i = 0; i < permissionsToTry.length; i++) {
+          final permission = permissionsToTry[i];
+          final permissionName = permission == Permission.photosAddOnly ? 'photosAddOnly' : 'photos';
+
+          print('Debug: Trying permission: $permissionName');
+
+          try {
+            // 检查权限状态
+            final status = await permission.status;
+            print('Debug: $permissionName status = $status');
+
+            if (status.isGranted) {
+              print('Debug: $permissionName already granted');
+              return true;
+            }
+
+            // 请求权限
+            print('Debug: Requesting $permissionName permission...');
+            final result = await permission.request();
+            print('Debug: $permissionName request result = $result');
+
+            if (result.isGranted) {
+              print('Debug: $permissionName granted!');
+              return true;
+            } else if (result.isPermanentlyDenied) {
+              print('Debug: $permissionName permanently denied');
+              if (i == permissionsToTry.length - 1) {
+                // 最后一个权限也被永久拒绝
+                _showPermissionDeniedDialog();
+                return false;
+              }
+              // 尝试下一个权限
+              continue;
+            } else {
+              print('Debug: $permissionName denied, trying next...');
+              if (i == permissionsToTry.length - 1) {
+                // 最后一个权限也被拒绝
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('需要相册权限才能保存图片'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
+                return false;
+              }
+              // 尝试下一个权限
+              continue;
+            }
+          } catch (e) {
+            print('Debug: Error with $permissionName: $e');
+            if (i == permissionsToTry.length - 1) {
+              // 最后一个权限也出错了
+              throw e;
+            }
+            // 尝试下一个权限
+            continue;
+          }
+        }
+
+        return false;
+      } catch (e) {
+        print('Debug: All permission requests failed: $e');
+        print('Debug: Error type: ${e.runtimeType}');
+
+        // 显示错误信息
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('权限请求失败，请检查应用权限设置: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return false;
+      }
     }
 
     return false; // 不支持的平台
   }
 
+  // 显示权限被拒绝的对话框
+  void _showPermissionDeniedDialog() {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('需要相册权限'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('保存图片需要访问相册权限。'),
+            SizedBox(height: 12),
+            Text('请按以下步骤开启权限：', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 8),
+            Text('1. 点击"去设置"按钮'),
+            Text('2. 找到"照片"或"相册"选项'),
+            Text('3. 选择"所有照片"或"添加照片"'),
+            SizedBox(height: 8),
+            Text('如果设置中没有相册选项，请删除应用重新安装。',
+                 style: TextStyle(color: Colors.orange, fontSize: 12)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              openAppSettings(); // 打开应用设置页面
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+            ),
+            child: const Text('去设置'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 导出为图片
-  Future<void> _exportToImage() async {
+  Future<void>  _exportToImage() async {
     try {
       // 检查权限
       final hasPermission = await _checkAndRequestPermissions();
@@ -543,32 +678,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 保存图片到相册
+  // 下载图片
   Future<void> _downloadImage(Uint8List imageBytes) async {
     try {
       final String fileName = '小小卖部_${DateTime.now().millisecondsSinceEpoch}.png';
 
-      await SaverGallery.saveImage(
+      await DownloadUtils.downloadImage(
         imageBytes,
-        quality: 100,
-        fileName: fileName,
+        fileName,
         androidRelativePath: 'Pictures/小小卖部',
-        skipIfExists: false,
       );
 
       if (mounted) {
+        final message = PlatformUtils.isWeb
+            ? '图片已下载！'
+            : '图片已保存到相册！';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('图片已保存到相册！'),
+          SnackBar(
+            content: Text(message),
             backgroundColor: AppColors.success,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        final message = PlatformUtils.isWeb
+            ? '下载图片失败: ${e.toString()}'
+            : '保存图片失败: ${e.toString()}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存图片失败: ${e.toString()}'),
+            content: Text(message),
             backgroundColor: AppColors.error,
           ),
         );
