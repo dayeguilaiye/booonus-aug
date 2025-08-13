@@ -17,7 +17,7 @@ RUN flutter pub get
 COPY . .
 
 # Build Flutter web application for production with base href
-RUN flutter build web --release --web-renderer canvaskit --base-href /web/
+RUN flutter build web --release --base-href /web/
 
 # Stage 2: Production stage with Nginx
 FROM nginx:alpine AS production-stage
