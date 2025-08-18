@@ -13,8 +13,8 @@ on:
       - '.github/workflows/backend-build.yml'
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/backend
+  REGISTRY: crpi-6v0dsrwq1ylgrkdo.cn-chengdu.personal.cr.aliyuncs.com
+  IMAGE_NAME: booonus/backend
 
 jobs:
   build:
@@ -34,8 +34,8 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.ALIYUN_IMAGE_USERNAME }}
+        password: ${{ secrets.ALIYUN_IMAGE_SECRET }}
 
     - name: Extract metadata
       id: meta
