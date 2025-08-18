@@ -97,6 +97,34 @@ class RulesApiService {
     }
   }
 
+  // 置顶规则
+  static Future<Map<String, dynamic>> pinRule(int ruleId) async {
+    try {
+      final response = await apiService.post('/rules/$ruleId/pin');
+      return response.data;
+    } on DioException catch (e) {
+      print('Pin Rule API Error: ${e.response?.data}');
+      print('Status Code: ${e.response?.statusCode}');
+
+      final String userFriendlyMessage = _parseRulesError(e, '置顶规则失败');
+      throw Exception(userFriendlyMessage);
+    }
+  }
+
+  // 取消置顶规则
+  static Future<Map<String, dynamic>> unpinRule(int ruleId) async {
+    try {
+      final response = await apiService.delete('/rules/$ruleId/pin');
+      return response.data;
+    } on DioException catch (e) {
+      print('Unpin Rule API Error: ${e.response?.data}');
+      print('Status Code: ${e.response?.statusCode}');
+
+      final String userFriendlyMessage = _parseRulesError(e, '取消置顶规则失败');
+      throw Exception(userFriendlyMessage);
+    }
+  }
+
   // 解析规则相关API错误并返回用户友好的错误信息
   static String _parseRulesError(DioException e, String defaultMessage) {
     if (e.response?.data != null && e.response?.data['error'] != null) {

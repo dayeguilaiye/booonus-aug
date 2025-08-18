@@ -137,6 +137,16 @@ func createTables() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (user_id) REFERENCES users(id)
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS pinned_rules (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			rule_id INTEGER NOT NULL,
+			pinned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id),
+			FOREIGN KEY (rule_id) REFERENCES rules(id),
+			UNIQUE(user_id, rule_id)
+		)`,
 	}
 
 	for _, query := range queries {

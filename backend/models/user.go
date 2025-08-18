@@ -47,6 +47,9 @@ type Rule struct {
 	IsActive    bool      `json:"is_active" db:"is_active"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	// 置顶相关字段（仅在查询时填充，不存储在rules表中）
+	IsPinned *bool      `json:"is_pinned,omitempty"`
+	PinnedAt *time.Time `json:"pinned_at,omitempty"`
 }
 
 // Event 事件模型

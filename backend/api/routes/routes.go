@@ -55,6 +55,8 @@ func SetupRoutes() *gin.Engine {
 		protected.PUT("/rules/:id", handlers.UpdateRule)
 		protected.DELETE("/rules/:id", handlers.DeleteRule)
 		protected.POST("/rules/:id/execute", handlers.ExecuteRule)
+		protected.POST("/rules/:id/pin", handlers.PinRule)
+		protected.DELETE("/rules/:id/pin", handlers.UnpinRule)
 
 		// 事件
 		protected.GET("/events", handlers.GetEvents)

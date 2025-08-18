@@ -7,6 +7,8 @@ class Rule {
   final int creatorId;
   final String creatorName;
   final DateTime createdAt;
+  final bool isPinned;
+  final DateTime? pinnedAt;
 
   Rule({
     required this.id,
@@ -17,6 +19,8 @@ class Rule {
     required this.creatorId,
     required this.creatorName,
     required this.createdAt,
+    this.isPinned = false,
+    this.pinnedAt,
   });
 
   factory Rule.fromJson(Map<String, dynamic> json) {
@@ -29,6 +33,10 @@ class Rule {
       creatorId: json['creator_id'] ?? 0,
       creatorName: json['creator_name'] ?? '',
       createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
+      isPinned: json['is_pinned'] ?? false,
+      pinnedAt: json['pinned_at'] != null
+          ? DateTime.tryParse(json['pinned_at'])
+          : null,
     );
   }
 
@@ -42,6 +50,8 @@ class Rule {
       'creator_id': creatorId,
       'creator_name': creatorName,
       'created_at': createdAt.toIso8601String(),
+      'is_pinned': isPinned,
+      'pinned_at': pinnedAt?.toIso8601String(),
     };
   }
 
@@ -54,6 +64,8 @@ class Rule {
     int? creatorId,
     String? creatorName,
     DateTime? createdAt,
+    bool? isPinned,
+    DateTime? pinnedAt,
   }) {
     return Rule(
       id: id ?? this.id,
@@ -64,6 +76,8 @@ class Rule {
       creatorId: creatorId ?? this.creatorId,
       creatorName: creatorName ?? this.creatorName,
       createdAt: createdAt ?? this.createdAt,
+      isPinned: isPinned ?? this.isPinned,
+      pinnedAt: pinnedAt ?? this.pinnedAt,
     );
   }
 

@@ -42,15 +42,22 @@ func GetRules(c *gin.Context) {
 	// 确定当前用户是user1还是user2
 	isCurrentUserUser1 := (userID == user1ID)
 
-	// 获取规则列表
+	// 获取规则列表，包含置顶信息
 	query := `
-		SELECT id, couple_id, name, description, points, target_type, is_active, created_at, updated_at
-		FROM rules
-		WHERE couple_id = ? AND is_active = TRUE
-		ORDER BY created_at DESC
+		SELECT r.id, r.couple_id, r.name, r.description, r.points, r.target_type, r.is_active,
+		       r.created_at, r.updated_at,
+		       CASE WHEN pr.rule_id IS NOT NULL THEN 1 ELSE 0 END as is_pinned,
+		       pr.pinned_at
+		FROM rules r
+		LEFT JOIN pinned_rules pr ON r.id = pr.rule_id AND pr.user_id = ?
+		WHERE r.couple_id = ? AND r.is_active = TRUE
+		ORDER BY
+			CASE WHEN pr.rule_id IS NOT NULL THEN 0 ELSE 1 END,
+			pr.pinned_at DESC,
+			r.created_at DESC
 	`
 
-	rows, err := database.DB.Query(query, coupleID.Int64)
+	rows, err := database.DB.Query(query, userID, coupleID.Int64)
 	if err != nil {
 		logger.Error("Failed to get rules: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get rules"})
@@ -61,14 +68,24 @@ func GetRules(c *gin.Context) {
 	var rules []gin.H
 	for rows.Next() {
 		var rule models.Rule
+		var isPinned int
+		var pinnedAt sql.NullTime
 
 		err := rows.Scan(
 			&rule.ID, &rule.CoupleID, &rule.Name, &rule.Description, &rule.Points,
 			&rule.TargetType, &rule.IsActive, &rule.CreatedAt, &rule.UpdatedAt,
+			&isPinned, &pinnedAt,
 		)
 		if err != nil {
 			logger.Error("Failed to scan rule: " + err.Error())
 			continue
+		}
+
+		// 设置置顶信息
+		isPinnedBool := isPinned == 1
+		rule.IsPinned = &isPinnedBool
+		if pinnedAt.Valid {
+			rule.PinnedAt = &pinnedAt.Time
 		}
 
 		// 转换target_type为前端友好的格式
@@ -92,7 +109,7 @@ func GetRules(c *gin.Context) {
 			targetTypeForFrontend = rule.TargetType
 		}
 
-		rules = append(rules, gin.H{
+		ruleData := gin.H{
 			"id":          rule.ID,
 			"couple_id":   rule.CoupleID,
 			"name":        rule.Name,
@@ -102,7 +119,17 @@ func GetRules(c *gin.Context) {
 			"is_active":   rule.IsActive,
 			"created_at":  rule.CreatedAt,
 			"updated_at":  rule.UpdatedAt,
-		})
+		}
+
+		// 添加置顶信息
+		if rule.IsPinned != nil {
+			ruleData["is_pinned"] = *rule.IsPinned
+		}
+		if rule.PinnedAt != nil {
+			ruleData["pinned_at"] = *rule.PinnedAt
+		}
+
+		rules = append(rules, ruleData)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -459,6 +486,70 @@ func ExecuteRule(c *gin.Context) {
 		"message":        "Rule executed successfully",
 		"affected_users": len(targetUsers),
 	})
+}
+
+// PinRule 置顶规则
+func PinRule(c *gin.Context) {
+	userID := c.GetInt("user_id")
+	ruleIDStr := c.Param("id")
+
+	ruleID, err := strconv.Atoi(ruleIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid rule ID"})
+		return
+	}
+
+	// 检查规则权限
+	if !canUserAccessRule(userID, ruleID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+		return
+	}
+
+	// 使用 INSERT OR REPLACE 来处理重复置顶（更新时间）
+	_, err = database.DB.Exec(
+		"INSERT OR REPLACE INTO pinned_rules (user_id, rule_id, pinned_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+		userID, ruleID,
+	)
+	if err != nil {
+		logger.Error("Failed to pin rule: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to pin rule"})
+		return
+	}
+
+	logger.Info("Rule pinned: " + strconv.Itoa(ruleID) + " by user " + strconv.Itoa(userID))
+	c.JSON(http.StatusOK, gin.H{"message": "Rule pinned successfully"})
+}
+
+// UnpinRule 取消置顶规则
+func UnpinRule(c *gin.Context) {
+	userID := c.GetInt("user_id")
+	ruleIDStr := c.Param("id")
+
+	ruleID, err := strconv.Atoi(ruleIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid rule ID"})
+		return
+	}
+
+	// 检查规则权限
+	if !canUserAccessRule(userID, ruleID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+		return
+	}
+
+	// 删除置顶记录
+	_, err = database.DB.Exec(
+		"DELETE FROM pinned_rules WHERE user_id = ? AND rule_id = ?",
+		userID, ruleID,
+	)
+	if err != nil {
+		logger.Error("Failed to unpin rule: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unpin rule"})
+		return
+	}
+
+	logger.Info("Rule unpinned: " + strconv.Itoa(ruleID) + " by user " + strconv.Itoa(userID))
+	c.JSON(http.StatusOK, gin.H{"message": "Rule unpinned successfully"})
 }
 
 // canUserAccessRule 检查用户是否可以访问某个规则

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
 import '../../../core/models/rule.dart';
 import '../../../core/models/couple.dart';
 import '../../../core/services/rules_api_service.dart';
@@ -13,6 +11,7 @@ import '../../../core/utils/undoable_snackbar_utils.dart';
 import '../../../core/utils/error_message_utils.dart';
 
 import '../../widgets/points_cards_widget.dart';
+import '../../widgets/rule_split_button.dart';
 
 class RulesScreen extends StatefulWidget {
   const RulesScreen({super.key});
@@ -122,10 +121,13 @@ class _RulesScreenState extends State<RulesScreen> {
       filtered = filtered.where((rule) {
         switch (_filterType) {
           case 'current_user':
-            return rule.targetType == 'current_user';
+            // 筛选对我生效的约定：包括只对我生效的和对双方生效的
+            return rule.targetType == 'current_user' || rule.targetType == 'both';
           case 'partner':
-            return rule.targetType == 'partner';
+            // 筛选对对方生效的约定：包括只对对方生效的和对双方生效的
+            return rule.targetType == 'partner' || rule.targetType == 'both';
           case 'both':
+            // 筛选只对双方生效的约定
             return rule.targetType == 'both';
           default:
             return true;
@@ -133,8 +135,22 @@ class _RulesScreenState extends State<RulesScreen> {
       }).toList();
     }
 
-    // 应用排序
+    // 应用排序，置顶的约定始终在最前面
     filtered.sort((a, b) {
+      // 首先按置顶状态排序，置顶的在前
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      // 如果都是置顶的，按置顶时间降序排列（最近置顶的在前）
+      if (a.isPinned && b.isPinned) {
+        if (a.pinnedAt != null && b.pinnedAt != null) {
+          return b.pinnedAt!.compareTo(a.pinnedAt!);
+        }
+        // 如果置顶时间为空，按创建时间排序
+        return b.createdAt.compareTo(a.createdAt);
+      }
+
+      // 如果都不是置顶的，按用户选择的排序方式排序
       switch (_sortOrder) {
         case 'time_asc':
           return a.createdAt.compareTo(b.createdAt);
@@ -873,105 +889,43 @@ class _RulesScreenState extends State<RulesScreen> {
     );
   }
 
-  // 构建适用对象标签
-  Widget _buildTargetTypeTags(Rule rule) {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final currentUser = userProvider.user;
-    final currentUserName = currentUser?.username ?? '我';
-    final partnerName = _couple?.partner.username ?? '对方';
-
+  // 构建适用对象圆点标识
+  Widget _buildTargetTypeDots(Rule rule) {
     if (rule.targetType == 'both') {
-      // 双方：显示两个标签
-      return Row(
+      // 双方：显示两个小圆点上下并列
+      return Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 当前用户标签
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.person,
-                  size: 16,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  currentUserName,
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 8),
-          // 伴侣标签
+          const SizedBox(height: 2),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.person_outline,
-                  size: 16,
-                  color: AppColors.accent,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  partnerName,
-                  style: const TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: AppColors.accent,
+              shape: BoxShape.circle,
             ),
           ),
         ],
       );
     } else {
-      // 单个用户：显示一个标签
+      // 单个用户：显示一个圆点
       final isCurrentUser = rule.targetType == 'current_user';
-      final displayName = isCurrentUser ? currentUserName : partnerName;
       final color = isCurrentUser ? AppColors.primary : AppColors.accent;
-      final icon = isCurrentUser ? Icons.person : Icons.person_outline;
 
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        width: 8,
+        height: 8,
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: color,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              displayName,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+          color: color,
+          shape: BoxShape.circle,
         ),
       );
     }
@@ -979,134 +933,136 @@ class _RulesScreenState extends State<RulesScreen> {
 
   Widget _buildRuleCard(Rule rule) {
     final pointsText = rule.points > 0 ? '+${rule.points}积分' : '${rule.points}积分';
-    final pointsColor = rule.points > 0 ? AppColors.success : AppColors.error;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Slidable(
-        key: ValueKey(rule.id),
-        endActionPane: ActionPane(
-          motion: const ScrollMotion(),
-          children: [
-            SlidableAction(
-              onPressed: (context) => _editRule(rule),
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
-              icon: Icons.edit,
-              label: '修改',
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                bottomLeft: Radius.circular(20),
-              ),
-            ),
-            SlidableAction(
-              onPressed: (context) => _deleteRule(rule),
-              backgroundColor: AppColors.error,
-              foregroundColor: AppColors.onPrimary,
-              icon: Icons.delete,
-              label: '删除',
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
-            ),
-          ],
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: const [
-              BoxShadow(
-                color: AppColors.gentleShadow,
-                blurRadius: 10,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: rule.isPinned ? AppColors.primaryContainer.withValues(alpha: 0.3) : AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: rule.isPinned
+            ? Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1)
+            : null,
+      ),
+      child: Row(
+        children: [
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 主要内容：左右两列布局
+                // 标题行：标签圆点 + 约定名称
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 左列：约定名称、描述、标签
+                    _buildTargetTypeDots(rule),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 第一行：约定名称
-                          Text(
-                            rule.name,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          // 第二行：约定描述
-                          if (rule.description.isNotEmpty)
-                            Text(
-                              rule.description,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          const SizedBox(height: 12),
-                          // 第三行：适用对象标签
-                          _buildTargetTypeTags(rule),
-                        ],
+                      child: Text(
+                        rule.name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onBackground,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    // 右列：积分和执行按钮
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // 第一行：积分显示
-                        Text(
-                          pointsText,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: pointsColor,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // 第二行：执行按钮
-                        ElevatedButton(
-                          onPressed: () => _executeRule(rule),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: AppColors.onPrimary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                          ),
-                          child: const Text(
-                            '执行',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
+                ),
+                const SizedBox(height: 2),
+                // 描述
+                Text(
+                  rule.description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-        ),
+          // Split Button
+          RuleSplitButton(
+            mainButtonText: pointsText,
+            onMainButtonPressed: () => _executeRule(rule),
+            menuItems: RuleMenuItems.buildMenuItems(isPinned: rule.isPinned),
+            onMenuItemSelected: (value) => _handleMenuAction(rule, value),
+            isPinned: rule.isPinned,
+          ),
+        ],
       ),
     );
+  }
+
+  // 处理菜单操作
+  Future<void> _handleMenuAction(Rule rule, String action) async {
+    switch (action) {
+      case 'pin':
+        await _pinRule(rule);
+        break;
+      case 'unpin':
+        await _unpinRule(rule);
+        break;
+      case 'edit':
+        await _editRule(rule);
+        break;
+      case 'delete':
+        await _deleteRule(rule);
+        break;
+    }
+  }
+
+  // 置顶规则
+  Future<void> _pinRule(Rule rule) async {
+    try {
+      await RulesApiService.pinRule(rule.id);
+
+      if (mounted) {
+        final message = rule.isPinned ? '置顶时间已刷新' : '约定已置顶';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+        _loadRules(); // 重新加载规则列表
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('置顶失败: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  // 取消置顶规则
+  Future<void> _unpinRule(Rule rule) async {
+    try {
+      await RulesApiService.unpinRule(rule.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已取消置顶'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+        _loadRules(); // 重新加载规则列表
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('取消置顶失败: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   // 编辑规则
