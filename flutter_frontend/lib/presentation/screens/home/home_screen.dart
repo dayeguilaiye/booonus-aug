@@ -502,17 +502,52 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          Text(
-            '${history.points > 0 ? '+' : ''}${history.points}',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: pointsColor,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${history.points > 0 ? '+' : ''}${history.points}',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: pointsColor,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _formatDateTime(history.createdAt),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  // 格式化日期时间
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays == 0) {
+      // 今天
+      return '今天 ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      // 昨天
+      return '昨天 ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays < 7) {
+      // 一周内
+      final weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      final weekday = weekdays[dateTime.weekday - 1];
+      return '$weekday ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else {
+      // 超过一周
+      return '${dateTime.month}月${dateTime.day}日 ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    }
   }
 
   // 显示创建事件对话框
