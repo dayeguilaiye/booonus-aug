@@ -18,6 +18,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  String? _errorMessage;
+  bool _isLoading = false;
+
+
 
   @override
   void dispose() {
@@ -29,14 +33,47 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.login(
-      _usernameController.text.trim(),
-      _passwordController.text,
-    );
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    if (success && mounted) {
-      context.go('/home');
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    try {
+      final success = await authProvider.login(
+        _usernameController.text.trim(),
+        _passwordController.text,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (success) {
+          context.go('/home');
+        } else {
+          // 登录失败时，清空密码字段但保留用户名
+          _passwordController.clear();
+          setState(() {
+            _errorMessage = '用户名或密码错误';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _passwordController.clear();
+          // 提取错误信息
+          String errorMessage = e.toString();
+          if (errorMessage.startsWith('Exception: ')) {
+            errorMessage = errorMessage.substring(11);
+          }
+          _errorMessage = errorMessage;
+        });
+      }
     }
   }
 
@@ -108,6 +145,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     labelText: '用户名',
                     prefixIcon: Icon(Icons.person),
                   ),
+                  onChanged: (value) {
+                    // 用户开始输入时清除错误信息
+                    if (_errorMessage != null) {
+                      setState(() {
+                        _errorMessage = null;
+                      });
+                    }
+                  },
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return '请输入用户名';
@@ -135,6 +180,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                   ),
+                  onChanged: (value) {
+                    // 用户开始输入时清除错误信息
+                    if (_errorMessage != null) {
+                      setState(() {
+                        _errorMessage = null;
+                      });
+                    }
+                  },
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return '请输入密码';
@@ -142,22 +195,30 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 32),
+
+                // Error message - 显示在密码框下面
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 16),
+                    child: Text(
+                      _errorMessage!,
+                      style: AppTextStyles.error,
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  const SizedBox(height: 32),
 
                 // Login button
-                Consumer<AuthProvider>(
-                  builder: (context, authProvider, child) {
-                    return ElevatedButton(
-                      onPressed: authProvider.isLoading ? null : _handleLogin,
-                      child: authProvider.isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('登录'),
-                    );
-                  },
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleLogin,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('登录'),
                 ),
                 const SizedBox(height: 16),
 
@@ -165,23 +226,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextButton(
                   onPressed: () => context.go('/register'),
                   child: const Text('还没有账号？点击注册'),
-                ),
-
-                // Error message
-                Consumer<AuthProvider>(
-                  builder: (context, authProvider, child) {
-                    if (authProvider.error != null) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          authProvider.error!,
-                          style: AppTextStyles.error,
-                          textAlign: TextAlign.center,
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
                 ),
               ],
             ),

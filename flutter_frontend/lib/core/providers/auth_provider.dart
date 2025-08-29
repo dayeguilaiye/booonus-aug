@@ -5,12 +5,8 @@ import '../models/user.dart';
 
 class AuthProvider extends ChangeNotifier {
   bool _isLoggedIn = false;
-  bool _isLoading = false;
-  String? _error;
 
   bool get isLoggedIn => _isLoggedIn;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
 
   AuthProvider() {
     _checkLoginStatus();
@@ -18,14 +14,16 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _checkLoginStatus() async {
     final token = StorageService.getToken();
+    final wasLoggedIn = _isLoggedIn;
     _isLoggedIn = token != null;
-    notifyListeners();
+
+    // 只有当登录状态真正改变时才通知监听者
+    if (wasLoggedIn != _isLoggedIn) {
+      notifyListeners();
+    }
   }
 
   Future<bool> login(String username, String password) async {
-    _setLoading(true);
-    _clearError();
-
     try {
       final response = await AuthApiService.login(username, password);
 
@@ -35,29 +33,18 @@ class AuthProvider extends ChangeNotifier {
           await StorageService.saveUserInfo(response['user']);
         }
         _isLoggedIn = true;
-        notifyListeners();
+        notifyListeners(); // 只在登录成功时通知
         return true;
       } else {
-        _setError('登录失败：无效的响应');
-        return false;
+        throw Exception('登录失败：无效的响应');
       }
     } catch (e) {
-      // 提取错误信息，去掉"Exception: "前缀
-      String errorMessage = e.toString();
-      if (errorMessage.startsWith('Exception: ')) {
-        errorMessage = errorMessage.substring(11);
-      }
-      _setError(errorMessage);
-      return false;
-    } finally {
-      _setLoading(false);
+      // 重新抛出异常，让调用方处理
+      rethrow;
     }
   }
 
   Future<bool> register(String username, String password) async {
-    _setLoading(true);
-    _clearError();
-
     try {
       final response = await AuthApiService.register(username, password);
 
@@ -67,22 +54,14 @@ class AuthProvider extends ChangeNotifier {
           await StorageService.saveUserInfo(response['user']);
         }
         _isLoggedIn = true;
-        notifyListeners();
+        notifyListeners(); // 只在注册成功时通知
         return true;
       } else {
-        _setError('注册失败：无效的响应');
-        return false;
+        throw Exception('注册失败：无效的响应');
       }
     } catch (e) {
-      // 提取错误信息，去掉"Exception: "前缀
-      String errorMessage = e.toString();
-      if (errorMessage.startsWith('Exception: ')) {
-        errorMessage = errorMessage.substring(11);
-      }
-      _setError(errorMessage);
-      return false;
-    } finally {
-      _setLoading(false);
+      // 重新抛出异常，让调用方处理
+      rethrow;
     }
   }
 
@@ -93,22 +72,5 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
-  }
 
-  void _setError(String error) {
-    _error = error;
-    notifyListeners();
-  }
-
-  void _clearError() {
-    _error = null;
-    notifyListeners();
-  }
-
-  void clearError() {
-    _clearError();
-  }
 }

@@ -80,7 +80,8 @@ class AppTextStyles {
   // 错误和成功消息样式
   static const TextStyle error = TextStyle(
     fontSize: 14,
-    color: AppColors.onError,
+    color: AppColors.error,
+    fontWeight: FontWeight.w500,
   );
   
   static const TextStyle success = TextStyle(

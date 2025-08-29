@@ -78,9 +78,12 @@ class BoooonusApp extends StatelessWidget {
           return null;
         }
 
+        // 如果用户未登录且不在登录/注册页面，重定向到登录页
         if (!isLoggedIn && !isLoggingIn) {
           return '/login';
         }
+
+        // 如果用户已登录且在登录/注册页面，重定向到首页
         if (isLoggedIn && isLoggingIn) {
           // 用户登录成功后，开始预加载组件
           PreloadManager().preloadAllComponents();

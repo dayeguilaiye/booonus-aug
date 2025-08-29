@@ -58,24 +58,12 @@ class CoupleApiService {
   // 获取情侣信息
   static Future<Map<String, dynamic>> getCouple() async {
     try {
-      print('CoupleApiService.getCouple - 开始请求');
       final response = await apiService.get('/couple');
-      print('CoupleApiService.getCouple - 响应状态码: ${response.statusCode}');
-      print('CoupleApiService.getCouple - 响应数据: ${response.data}');
       return response.data;
     } on DioException catch (e) {
-      print('CoupleApiService.getCouple - DioException发生');
-      print('Get Couple API Error: ${e.response?.data}');
-      print('Status Code: ${e.response?.statusCode}');
-      print('Error Type: ${e.type}');
-      print('Error Message: ${e.message}');
-
       if (e.response?.statusCode == 404) {
-        print('CoupleApiService.getCouple - 404错误，没有情侣关系');
         throw Exception('暂无情侣关系');
       }
-
-      print('CoupleApiService.getCouple - 其他错误');
       throw Exception('获取情侣信息失败，请稍后重试');
     }
   }
