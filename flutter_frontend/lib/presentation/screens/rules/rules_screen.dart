@@ -265,12 +265,12 @@ class _RulesScreenState extends State<RulesScreen> {
                   segments: [
                     ButtonSegment<String>(
                       value: 'current_user',
-                      label: Text(currentUserName),
+                      label: const Text('自己'),
                       icon: const Icon(Icons.person, size: 18),
                     ),
                     ButtonSegment<String>(
                       value: 'partner',
-                      label: Text(partnerName),
+                      label: const Text('对方'),
                       icon: const Icon(Icons.favorite, size: 18),
                     ),
                     ButtonSegment<String>(
@@ -1160,12 +1160,12 @@ class _RulesScreenState extends State<RulesScreen> {
                   segments: [
                     ButtonSegment<String>(
                       value: 'current_user',
-                      label: Text(currentUserName),
+                      label: const Text('自己'),
                       icon: const Icon(Icons.person, size: 18),
                     ),
                     ButtonSegment<String>(
                       value: 'partner',
-                      label: Text(partnerName),
+                      label: const Text('对方'),
                       icon: const Icon(Icons.favorite, size: 18),
                     ),
                     ButtonSegment<String>(
