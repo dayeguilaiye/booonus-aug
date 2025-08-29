@@ -7,16 +7,18 @@ import 'core/providers/user_provider.dart';
 import 'core/providers/auth_provider.dart';
 
 import 'core/services/storage_service.dart';
+import 'core/services/preload_manager.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
-import 'presentation/screens/shop/shop_screen.dart';
-import 'presentation/screens/shop/my_shop_screen.dart';
-import 'presentation/screens/rules/rules_screen.dart';
-import 'presentation/screens/profile/profile_screen.dart';
-import 'presentation/screens/profile/points_history_screen.dart';
-import 'presentation/screens/settings/settings_screen.dart';
 import 'presentation/widgets/main_navigation.dart';
+import 'widgets/deferred_loader.dart';
+
+// 延迟导入非首屏必需的组件
+import 'deferred/shop_deferred.dart' deferred as shop_deferred;
+import 'deferred/profile_deferred.dart' deferred as profile_deferred;
+import 'deferred/rules_deferred.dart' deferred as rules_deferred;
+import 'deferred/settings_deferred.dart' deferred as settings_deferred;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -80,8 +82,19 @@ class BoooonusApp extends StatelessWidget {
           return '/login';
         }
         if (isLoggedIn && isLoggingIn) {
+          // 用户登录成功后，开始预加载组件
+          PreloadManager().preloadAllComponents();
           return '/home';
         }
+
+        // 智能预加载：根据当前路由预测用户行为
+        if (isLoggedIn) {
+          PreloadManager().smartPreload(
+            currentRoute: state.matchedLocation,
+            isLoggedIn: isLoggedIn,
+          );
+        }
+
         return null;
       },
       routes: [
@@ -105,15 +118,27 @@ class BoooonusApp extends StatelessWidget {
             ),
             GoRoute(
               path: '/shop',
-              builder: (context, state) => const ShopScreen(),
+              builder: (context, state) => DeferredLoader(
+                loadLibrary: shop_deferred.loadLibrary,
+                builder: () => shop_deferred.ShopScreen(),
+                componentName: '商店',
+              ),
             ),
             GoRoute(
               path: '/rules',
-              builder: (context, state) => const RulesScreen(),
+              builder: (context, state) => DeferredLoader(
+                loadLibrary: rules_deferred.loadLibrary,
+                builder: () => rules_deferred.RulesScreen(),
+                componentName: '规则',
+              ),
             ),
             GoRoute(
               path: '/profile',
-              builder: (context, state) => const ProfileScreen(),
+              builder: (context, state) => DeferredLoader(
+                loadLibrary: profile_deferred.loadLibrary,
+                builder: () => profile_deferred.ProfileScreen(),
+                componentName: '个人资料',
+              ),
             ),
           ],
         ),
@@ -121,29 +146,45 @@ class BoooonusApp extends StatelessWidget {
         // Settings route (outside main navigation)
         GoRoute(
           path: '/settings',
-          builder: (context, state) => const SettingsScreen(),
+          builder: (context, state) => DeferredLoader(
+            loadLibrary: settings_deferred.loadLibrary,
+            builder: () => settings_deferred.SettingsScreen(),
+            componentName: '设置',
+          ),
         ),
 
         // My Shop route (outside main navigation)
         GoRoute(
           path: '/my-shop',
-          builder: (context, state) => const MyShopScreen(),
+          builder: (context, state) => DeferredLoader(
+            loadLibrary: shop_deferred.loadLibrary,
+            builder: () => shop_deferred.MyShopScreen(),
+            componentName: '我的小卖部',
+          ),
         ),
 
         // Points History routes (outside main navigation)
         GoRoute(
           path: '/points-history/my',
-          builder: (context, state) => const PointsHistoryScreen(
-            isMyHistory: true,
+          builder: (context, state) => DeferredLoader(
+            loadLibrary: profile_deferred.loadLibrary,
+            builder: () => profile_deferred.PointsHistoryScreen(
+              isMyHistory: true,
+            ),
+            componentName: '积分记录',
           ),
         ),
         GoRoute(
           path: '/points-history/partner',
           builder: (context, state) {
             final targetUserId = state.uri.queryParameters['targetUserId'];
-            return PointsHistoryScreen(
-              isMyHistory: false,
-              targetUserId: targetUserId != null ? int.tryParse(targetUserId) : null,
+            return DeferredLoader(
+              loadLibrary: profile_deferred.loadLibrary,
+              builder: () => profile_deferred.PointsHistoryScreen(
+                isMyHistory: false,
+                targetUserId: targetUserId != null ? int.tryParse(targetUserId) : null,
+              ),
+              componentName: '积分记录',
             );
           },
         ),

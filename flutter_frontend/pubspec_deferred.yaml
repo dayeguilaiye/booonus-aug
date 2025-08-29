@@ -1,0 +1,40 @@
+# Flutter Web 延迟加载配置示例
+# 这个文件展示了如何在 pubspec.yaml 中配置延迟组件
+
+flutter:
+  # 启用延迟组件
+  deferred-components:
+    # 商店组件
+    - name: shopComponent
+      libraries:
+        - package:booonus_flutter/deferred/shop_deferred.dart
+        - package:booonus_flutter/presentation/screens/shop/shop_screen.dart
+        - package:booonus_flutter/presentation/screens/shop/my_shop_screen.dart
+        - package:booonus_flutter/core/services/shop_api_service.dart
+      assets:
+        # 如果有商店相关的图片资源，可以在这里指定
+        # - assets/images/shop/
+    
+    # 个人资料组件
+    - name: profileComponent
+      libraries:
+        - package:booonus_flutter/deferred/profile_deferred.dart
+        - package:booonus_flutter/presentation/screens/profile/profile_screen.dart
+        - package:booonus_flutter/presentation/screens/profile/points_history_screen.dart
+        - package:booonus_flutter/presentation/screens/profile/avatar_selection_screen.dart
+      assets:
+        # 头像相关资源
+        - assets/images/avatars/
+    
+    # 规则组件
+    - name: rulesComponent
+      libraries:
+        - package:booonus_flutter/deferred/rules_deferred.dart
+        - package:booonus_flutter/presentation/screens/rules/rules_screen.dart
+        - package:booonus_flutter/core/services/rules_api_service.dart
+    
+    # 设置组件
+    - name: settingsComponent
+      libraries:
+        - package:booonus_flutter/deferred/settings_deferred.dart
+        - package:booonus_flutter/presentation/screens/settings/settings_screen.dart
