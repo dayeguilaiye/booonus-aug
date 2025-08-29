@@ -194,6 +194,7 @@ class _RulesScreenState extends State<RulesScreen> {
     final descriptionController = TextEditingController();
     final pointsController = TextEditingController();
     String targetType = 'both';
+    String? errorMessage;
 
     // 获取当前用户信息
     final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -234,7 +235,8 @@ class _RulesScreenState extends State<RulesScreen> {
                     ),
                     prefixIcon: const Icon(Icons.description),
                   ),
-                  maxLines: 3,
+                  minLines: 1,
+                  maxLines: 2,
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -257,51 +259,67 @@ class _RulesScreenState extends State<RulesScreen> {
                     color: AppColors.onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
-                // 紧凑的单选按钮布局
-                Column(
-                  children: [
-                    RadioListTile<String>(
-                      title: Text(currentUserName),
+                const SizedBox(height: 12),
+                // 使用 SegmentedButton 替代单选按钮
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment<String>(
                       value: 'current_user',
-                      groupValue: targetType,
-                      activeColor: AppColors.primary,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          targetType = value!;
-                        });
-                      },
+                      label: Text(currentUserName),
+                      icon: const Icon(Icons.person, size: 18),
                     ),
-                    RadioListTile<String>(
-                      title: Text(partnerName),
+                    ButtonSegment<String>(
                       value: 'partner',
-                      groupValue: targetType,
-                      activeColor: AppColors.primary,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          targetType = value!;
-                        });
-                      },
+                      label: Text(partnerName),
+                      icon: const Icon(Icons.favorite, size: 18),
                     ),
-                    RadioListTile<String>(
-                      title: const Text('双方'),
+                    ButtonSegment<String>(
                       value: 'both',
-                      groupValue: targetType,
-                      activeColor: AppColors.primary,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          targetType = value!;
-                        });
-                      },
+                      label: const Text('双方'),
+                      icon: const Icon(Icons.people, size: 18),
                     ),
                   ],
+                  selected: {targetType},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setDialogState(() {
+                      targetType = newSelection.first;
+                    });
+                  },
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor: AppColors.primary,
+                    selectedForegroundColor: AppColors.onPrimary,
+                    backgroundColor: AppColors.surface,
+                    foregroundColor: AppColors.onSurface,
+                    side: BorderSide(color: AppColors.outline),
+                  ),
                 ),
+                // 错误信息显示
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            errorMessage!,
+                            style: TextStyle(
+                              color: AppColors.error,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 ],
               ),
             ),
@@ -315,7 +333,52 @@ class _RulesScreenState extends State<RulesScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () async {
+                // 清除之前的错误信息
+                setDialogState(() {
+                  errorMessage = null;
+                });
+
+                final name = nameController.text.trim();
+                final description = descriptionController.text.trim();
+                final pointsStr = pointsController.text.trim();
+
+                // 验证输入
+                if (name.isEmpty || pointsStr.isEmpty) {
+                  setDialogState(() {
+                    errorMessage = '请填写约定名称和积分';
+                  });
+                  return;
+                }
+
+                final points = int.tryParse(pointsStr);
+                if (points == null) {
+                  setDialogState(() {
+                    errorMessage = '请输入有效的积分值';
+                  });
+                  return;
+                }
+
+                // 尝试创建约定
+                try {
+                  await RulesApiService.createRule(
+                    name: name,
+                    description: description,
+                    points: points,
+                    targetType: targetType,
+                  );
+
+                  // 成功后关闭弹出框
+                  if (context.mounted) {
+                    Navigator.of(context).pop(true);
+                  }
+                } catch (e) {
+                  // 显示错误信息，不关闭弹出框
+                  setDialogState(() {
+                    errorMessage = '创建约定失败: ${_getErrorMessage(e)}';
+                  });
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
@@ -328,45 +391,7 @@ class _RulesScreenState extends State<RulesScreen> {
     );
 
     if (result == true) {
-      await _createRule(
-        nameController.text.trim(),
-        descriptionController.text.trim(),
-        pointsController.text.trim(),
-        targetType,
-      );
-    }
-  }
-
-  Future<void> _createRule(String name, String description, String pointsStr, String targetType) async {
-    if (name.isEmpty || pointsStr.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请填写约定名称和积分'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-      return;
-    }
-
-    final points = int.tryParse(pointsStr);
-    if (points == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请输入有效的积分值'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-      return;
-    }
-
-    try {
-      await RulesApiService.createRule(
-        name: name,
-        description: description,
-        points: points,
-        targetType: targetType,
-      );
-
+      // 成功创建约定，显示成功消息并刷新列表
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -376,17 +401,10 @@ class _RulesScreenState extends State<RulesScreen> {
         );
       }
       _loadRules();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('创建约定失败: ${_getErrorMessage(e)}'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
     }
   }
+
+
 
   Future<void> _executeRule(Rule rule) async {
     final pointsText = rule.points > 0 ? '+${rule.points}' : '${rule.points}';
@@ -1071,6 +1089,7 @@ class _RulesScreenState extends State<RulesScreen> {
     final descriptionController = TextEditingController(text: rule.description);
     final pointsController = TextEditingController(text: rule.points.toString());
     String targetType = rule.targetType;
+    String? errorMessage;
 
     // 获取当前用户信息
     final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -1111,7 +1130,8 @@ class _RulesScreenState extends State<RulesScreen> {
                     ),
                     prefixIcon: const Icon(Icons.description),
                   ),
-                  maxLines: 3,
+                  minLines: 1,
+                  maxLines: 2,
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -1134,51 +1154,67 @@ class _RulesScreenState extends State<RulesScreen> {
                     color: AppColors.onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
-                // 紧凑的单选按钮布局
-                Column(
-                  children: [
-                    RadioListTile<String>(
-                      title: Text(currentUserName),
+                const SizedBox(height: 12),
+                // 使用 SegmentedButton 替代单选按钮
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment<String>(
                       value: 'current_user',
-                      groupValue: targetType,
-                      activeColor: AppColors.primary,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          targetType = value!;
-                        });
-                      },
+                      label: Text(currentUserName),
+                      icon: const Icon(Icons.person, size: 18),
                     ),
-                    RadioListTile<String>(
-                      title: Text(partnerName),
+                    ButtonSegment<String>(
                       value: 'partner',
-                      groupValue: targetType,
-                      activeColor: AppColors.primary,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          targetType = value!;
-                        });
-                      },
+                      label: Text(partnerName),
+                      icon: const Icon(Icons.favorite, size: 18),
                     ),
-                    RadioListTile<String>(
-                      title: const Text('双方'),
+                    ButtonSegment<String>(
                       value: 'both',
-                      groupValue: targetType,
-                      activeColor: AppColors.primary,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          targetType = value!;
-                        });
-                      },
+                      label: const Text('双方'),
+                      icon: const Icon(Icons.people, size: 18),
                     ),
                   ],
+                  selected: {targetType},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setDialogState(() {
+                      targetType = newSelection.first;
+                    });
+                  },
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor: AppColors.primary,
+                    selectedForegroundColor: AppColors.onPrimary,
+                    backgroundColor: AppColors.surface,
+                    foregroundColor: AppColors.onSurface,
+                    side: BorderSide(color: AppColors.outline),
+                  ),
                 ),
+                // 错误信息显示
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            errorMessage!,
+                            style: TextStyle(
+                              color: AppColors.error,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 ],
               ),
             ),
@@ -1192,7 +1228,53 @@ class _RulesScreenState extends State<RulesScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () async {
+                // 清除之前的错误信息
+                setDialogState(() {
+                  errorMessage = null;
+                });
+
+                final name = nameController.text.trim();
+                final description = descriptionController.text.trim();
+                final pointsText = pointsController.text.trim();
+
+                // 验证输入
+                if (name.isEmpty || pointsText.isEmpty) {
+                  setDialogState(() {
+                    errorMessage = '请填写约定名称和积分';
+                  });
+                  return;
+                }
+
+                final points = int.tryParse(pointsText);
+                if (points == null) {
+                  setDialogState(() {
+                    errorMessage = '积分必须是数字';
+                  });
+                  return;
+                }
+
+                // 尝试更新约定
+                try {
+                  await RulesApiService.updateRule(
+                    rule.id,
+                    name: name,
+                    description: description,
+                    points: points,
+                    targetType: targetType,
+                  );
+
+                  // 成功后关闭弹出框
+                  if (context.mounted) {
+                    Navigator.of(context).pop(true);
+                  }
+                } catch (e) {
+                  // 显示错误信息，不关闭弹出框
+                  setDialogState(() {
+                    errorMessage = '修改约定失败: ${_getErrorMessage(e)}';
+                  });
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
@@ -1205,62 +1287,15 @@ class _RulesScreenState extends State<RulesScreen> {
     );
 
     if (result == true) {
-      final name = nameController.text.trim();
-      final description = descriptionController.text.trim();
-      final pointsText = pointsController.text.trim();
-
-      if (name.isEmpty || pointsText.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('请填写约定名称和积分'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
-        return;
-      }
-
-      final points = int.tryParse(pointsText);
-      if (points == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('积分必须是数字'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
-        return;
-      }
-
-      try {
-        await RulesApiService.updateRule(
-          rule.id,
-          name: name,
-          description: description,
-          points: points,
-          targetType: targetType,
+      // 成功修改约定，显示成功消息并刷新列表
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('约定修改成功！'),
+            backgroundColor: AppColors.success,
+          ),
         );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('约定修改成功！'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-          _loadRules();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('修改约定失败: ${_getErrorMessage(e)}'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
+        _loadRules();
       }
     }
 
