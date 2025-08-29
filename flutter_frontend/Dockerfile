@@ -16,8 +16,8 @@ RUN flutter pub get
 # Copy the rest of the source code
 COPY . .
 
-# Build Flutter web application for production with base href
-RUN flutter build web --release --base-href /web/
+# Build Flutter web application for production with WebAssembly and base href
+RUN flutter build web --wasm --release --base-href /web/
 
 # Stage 2: Production stage with Nginx
 FROM nginx:alpine AS production-stage
